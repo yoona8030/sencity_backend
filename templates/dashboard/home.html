@@ -1,0 +1,95 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>관리자 페이지 | CCTV 관리</title>
+
+  <!-- Font Awesome -->
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css"
+  />
+
+  <!-- 프로젝트 CSS -->
+  <link rel="stylesheet" href="{% static 'dashboard/css/dashboard.css' %}" />
+</head>
+<body>
+  <div class="container">
+    <!-- 사이드바 -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">관리자 페이지</div>
+      <div class="sidebar-logo">
+        <img src="{% static 'dashboard/images/logo.png' %}" alt="SENCITY" />
+        <span>SENCITY</span>
+      </div>
+      <a href="/admin/" class="sidebar-link">
+        <i class="fa-solid fa-arrow-up-right-from-square"></i>
+        사이트 바로가기
+      </a>
+      <hr />
+      <nav class="sidebar-menu">
+        <div class="menu-group">사이트 관리</div>
+        <a href="#" class="menu-item"><i class="fa-solid fa-th-large"></i> 대시보드</a>
+        <a href="#" class="menu-item"><i class="fa-solid fa-camera"></i> CCTV 관리</a>
+        <a href="#" class="menu-item"><i class="fa-solid fa-tv"></i> 신고 처리 및 관리</a>
+        <a href="#" class="menu-item"><i class="fa-solid fa-gear"></i> 설정</a>
+        <a href="#" class="menu-item"><i class="fa-solid fa-user"></i> 사용자 관리</a>
+        <div class="menu-group">콘텐츠 및 통계</div>
+        <a href="#" class="menu-item"><i class="fa-solid fa-chart-column"></i> 데이터 분석 및 통계</a>
+        <a href="#" class="menu-item"><i class="fa-solid fa-file-lines"></i> 콘텐츠 관리</a>
+        <a href="#" class="menu-item"><i class="fa-solid fa-bell"></i> 공지 설정</a>
+      </nav>
+    </aside>
+
+    <!-- 메인 콘텐츠 -->
+    <main class="main-content">
+      <div class="dashboard-body">
+        <h1>CCTV 관리</h1>
+        <div class="dashboard-grid">
+          <!-- 디바이스 현황 -->
+          <section class="panel devices-panel">
+            <h2>CCTV 디바이스 현황</h2>
+            <div class="devices-list">
+              {% for d in devices %}
+              <div class="device-card {{ d.status|lower }}">
+                <div class="device-left">
+                  <i class="fa-solid fa-camera"></i>
+                  <div class="device-info">
+                    <span class="name">{{ d.name }}</span>
+                    <span class="status">{{ d.status }}</span>
+                  </div>
+                </div>
+                <div class="device-dot"></div>
+              </div>
+              {% endfor %}
+            </div>
+          </section>
+
+          <!-- 실시간 영상 -->
+          <section class="panel video-panel">
+            <h2>실시간 영상</h2>
+            <video src="{{ video_url }}" controls autoplay muted></video>
+          </section>
+
+          <!-- 모션 센서 -->
+          <section class="panel sensors-panel">
+            <h2>모션 센서</h2>
+            <div class="sensors-grid">
+              {% for s in sensors %}
+              <div class="sensor-card {% if s.status == '감지됨' %}detected{% endif %}">
+                <i class="fa-solid fa-shield-halved"></i>
+                <span class="sensor-text">
+                  {{ s.device.name }} 구역<br/>{{ s.status }}
+                </span>
+              </div>
+              {% endfor %}
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

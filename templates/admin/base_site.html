@@ -1,0 +1,17 @@
+{# dashboard/templates/admin/base_site.html #}
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block title %}SENCITY 관리자{% endblock %}
+
+{% block branding %}
+<h1 id="site-name">
+  <a href="{% url 'admin:index' %}">SENCITY 관리자</a>
+</h1>
+{% endblock %}
+
+{% block extrahead %}
+  {{ block.super }}
+  {# ↓ 이 줄을 지우거나 주석처리 해 주세요 ↓ #}
+  {# <link rel="stylesheet" href="{% static 'dashboard/css/custom_admin.css' %}"> #}
+{% endblock %}
