@@ -9,8 +9,8 @@ SECRET_KEY = 'django-insecure-c#-byo@@o4m0xv_xme#p(51cijvsdfx211e_=v3p5_$87hhy!p
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '10.0.2.2', '0.0.0.0', '121.161.194.229']
-
+# ALLOWED_HOSTS = ['localhost', '127.0.0.1', '10.0.2.2', '0.0.0.0', '121.161.194.229', '172.30.1.68']
+ALLOWED_HOSTS = ['*']
 # Application definition
 
 INSTALLED_APPS = [
@@ -20,6 +20,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'django_filters',
     'rest_framework',
     'corsheaders', 
     'api', 
@@ -149,4 +150,5 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:19006',
     'http://10.0.2.2:8000',
+    'http://192.168.0.15'
 ]
