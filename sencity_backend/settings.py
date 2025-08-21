@@ -67,6 +67,11 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
+    "DEFAULT_RENDERER_CLASSES": [
+        "rest_framework.renderers.JSONRenderer",
+        'sencity_backend.utils.renderers.UTF8JSONRenderer',
+        'rest_framework.renderers.BrowsableAPIRenderer',
+    ],
 }
 
 # Database
@@ -150,5 +155,6 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:19006',
     'http://10.0.2.2:8000',
-    'http://192.168.0.15'
+    'http://192.168.0.15', 
+    'http://222.109.48.232'
 ]

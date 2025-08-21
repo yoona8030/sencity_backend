@@ -1,7 +1,7 @@
 # api/urls.py
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-
+from . import views
 from .views import (
     SignUpView,
     LoginView,
@@ -34,4 +34,6 @@ urlpatterns = [
     path('signup/',      SignUpView.as_view(),    name='signup'),
     path('login/',       LoginView.as_view(),     name='login'),
     path('animal-info/', animal_info,             name='animal-info'),
+    path("reports/stats/animal/", views.animal_stats, name="animal-stats"),
+    path("reports/stats/region-by-animal/", views.region_by_animal_stats, name="region-by-animal-stats"),
 ]

@@ -1,6 +1,7 @@
 # api/models.py
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
+from datetime import datetime
 from django.db import models
 
 class User(AbstractUser):
@@ -64,6 +65,13 @@ class Location(models.Model):
             models.Index(fields=["city", "district"]),
             models.Index(fields=["latitude", "longitude"]),
         ]
+    
+    constraints = [
+            models.UniqueConstraint(
+                fields=['latitude', 'longitude', 'city', 'district', 'region', 'address'],
+                name='unique_location_lat_lon'
+            )
+        ]
 
     def __str__(self):
         return f"Location#{self.id} - {self.region or self.address or f'{self.latitude},{self.longitude}'}"
@@ -102,9 +110,13 @@ class Report(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='checking') 
 
     def __str__(self):
-        animal_name = getattr(self.animal, 'name_kor', str(self.animal))
-        return f"{self.user} – {animal_name} ({self.report_date:%Y-%m-%d %H:%M})"
-
+        animal_name = getattr(self.animal, 'name_kor', str(self.animal)) if self.animal else "Unknown"
+        if hasattr(self.report_date, "strftime"):
+            date_str = self.report_date.strftime("%Y-%m-%d %H:%M")
+        else:
+            date_str = str(self.report_date)
+        return f"{self.user} – {animal_name} ({date_str})"
+    
     class Meta:
         ordering = ['-report_date']
         indexes = [

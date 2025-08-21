@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.db.models import Q, Count
+from django.http import JsonResponse
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import mixins, viewsets, status
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser, IsAuthenticatedOrReadOnly
@@ -22,6 +23,67 @@ from datetime import datetime
 from .filters import ReportFilter, NotificationFilter
 
 User = get_user_model()
+
+class SearchHistoryViewSet(
+    mixins.ListModelMixin,
+    mixins.CreateModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet
+):
+    """
+    GET    /search-history/        → 로그인 유저 자신의 검색 기록 조회
+    POST   /search-history/        → 로그인 유저 자신의 검색 기록 생성
+    DELETE /search-history/{pk}/   → 해당 기록 삭제
+    """
+    queryset = SearchHistory.objects.all()
+    serializer_class = SearchHistorySerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes     = [IsAuthenticated]
+
+    def get_queryset(self):
+        return self.queryset.filter(user=self.request.user).order_by('-id')
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # 로그인된 사용자 자신의 기록만 반환 (최신순)
+        return self.queryset.filter(user=self.request.user).order_by('-id')
+
+    def perform_create(self, serializer):
+        # 생성 시 user 필드 자동 연결
+        serializer.save(user=self.request.user)
+
+def animal_stats(request):
+    stats = (
+        Report.objects.values("animal__name_kor")
+        .annotate(count=Count("id"))
+        .order_by("-count")
+    )
+    result = [{"animal": s["animal__name_kor"], "count": s["count"]} for s in stats]
+    return JsonResponse(result, safe=False)
+
+
+# 지역별 + 동물별 신고 건수
+def region_by_animal_stats(request):
+    stats = (
+        Report.objects.values("location__city", "animal__name_kor")
+        .annotate(count=Count("id"))
+        .order_by("location__city")
+    )
+    result = [
+        {
+            "city": s["location__city"],
+            "animal": s["animal__name_kor"],
+            "count": s["count"],
+        }
+        for s in stats
+    ]
+    return JsonResponse(result, safe=False)
+############################################################3
+
 
 class SignUpView(APIView):
     permission_classes = [AllowAny]
@@ -97,39 +159,6 @@ class AnimalViewSet(viewsets.ReadOnlyModelViewSet):
         serializer = self.get_serializer(qs, many=True)
         return Response(serializer.data)
 
-
-class SearchHistoryViewSet(
-    mixins.ListModelMixin,
-    mixins.CreateModelMixin,
-    mixins.DestroyModelMixin,
-    viewsets.GenericViewSet
-):
-    """
-    GET    /search-history/        → 로그인 유저 자신의 검색 기록 조회
-    POST   /search-history/        → 로그인 유저 자신의 검색 기록 생성
-    DELETE /search-history/{pk}/   → 해당 기록 삭제
-    """
-    queryset = SearchHistory.objects.all()
-    serializer_class = SearchHistorySerializer
-    authentication_classes = [JWTAuthentication]
-    permission_classes     = [IsAuthenticated]
-
-    def get_queryset(self):
-        return self.queryset.filter(user=self.request.user).order_by('-id')
-
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
-
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        # 로그인된 사용자 자신의 기록만 반환 (최신순)
-        return self.queryset.filter(user=self.request.user).order_by('-id')
-
-    def perform_create(self, serializer):
-        # 생성 시 user 필드 자동 연결
-        serializer.save(user=self.request.user)
-
 class LocationViewSet(viewsets.ReadOnlyModelViewSet):
     """
     위치 목록/상세 조회
@@ -180,6 +209,33 @@ class ReportViewSet(mixins.ListModelMixin,
             serializer.save(user=self.request.user)
         else:
             serializer.save()
+    def list(self, request, *args, **kwargs):   # ### 수정됨
+        queryset = self.filter_queryset(self.get_queryset())
+
+        from_date = request.query_params.get("from")   # ### 수정됨
+        to_date = request.query_params.get("to")       # ### 수정됨
+
+        if from_date and to_date:                      # ### 수정됨
+            try:
+                start = datetime.strptime(from_date, "%Y-%m-%d").date()
+                end = datetime.strptime(to_date, "%Y-%m-%d").date()
+
+                # report_date 이 DateField 라면 __gte/__lte, 
+                # DateTimeField 라면 __date__gte/__date__lte 사용
+                queryset = queryset.filter(
+                    report_date__date__gte=start,      # ### 수정됨
+                    report_date__date__lte=end         # ### 수정됨
+                )
+            except ValueError:
+                pass
+
+        page = self.paginate_queryset(queryset)        # ### 수정됨
+        if page is not None:                           # ### 수정됨
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)               # ### 수정됨
 
     # ===== 기존 요약 통계 =====
     @action(detail=False, methods=['get'], url_path='stats')
@@ -203,46 +259,102 @@ class ReportViewSet(mixins.ListModelMixin,
         return Response(data)
 
     # ===== 동물별 신고 건수 (도넛) =====
-    @action(detail=False, methods=['get'], url_path='stats/animal')
-    def stats_animal(self, request):
-        """
-        GET /api/reports/stats/animal?start=YYYY-MM-DD&end=YYYY-MM-DD&status=checking
-        응답: [{ "animal": "고라니", "count": 123 }, ...]
-        """
-        qs = self.filter_queryset(self.get_queryset())
-        rows = (qs.values('animal__name_kor')
-                  .annotate(count=Count('id'))
-                  .order_by('-count'))
-        data = [{'animal': r['animal__name_kor'] or '미상', 'count': r['count']} for r in rows]
-        return Response(data)
+@action(detail=False, methods=['get'], url_path='stats/animal')
+def stats_animal(self, request):
+    qs = self.filter_queryset(self.get_queryset())
+    rows = (
+        qs.values('animal__name_kor')
+          .annotate(count=Count('id'))
+          .order_by('-count')
+    )
 
-    # ===== 지역 × 동물별 신고 건수 (스택 바) =====
-    @action(detail=False, methods=['get'], url_path='stats/region-by-animal')
-    def stats_region_by_animal(self, request):
-        """
-        GET /api/reports/stats/region-by-animal?regions=서울,경기&start=YYYY-MM-DD&end=YYYY-MM-DD
-        응답: [{ "region": "서울", "animal": "고라니", "count": 10 }, ...]
-        """
-        qs = self.filter_queryset(self.get_queryset())
+    # ✅ Top4 + 기타
+    top4 = rows[:4]
+    top_animals = [r['animal__name_kor'] or '미상' for r in top4]
+    etc_count = sum(r['count'] for r in rows if (r['animal__name_kor'] or '미상') not in top_animals)
 
-        # Location 기반 집계
-        lqs = Location.objects.filter(id__in=qs.values('location_id'))
+    data = [{'animal': r['animal__name_kor'] or '미상', 'count': r['count']} for r in top4]
+    if etc_count > 0:
+        data.append({'animal': '기타', 'count': etc_count})
 
-        regions = request.query_params.get('regions')
-        if regions:
-            want = [s.strip() for s in regions.split(',') if s.strip()]
-            if want:
-                lqs = lqs.filter(region__in=want)
+    # 👉 프론트에서 legend 색상 순서를 동일하게 쓰기 위해 Top4 + 기타 순서 고정
+    return Response({
+        "top_animals": top_animals,  # 순서 정보 (예: ["고라니","너구리","멧토끼","여우"])
+        "data": data
+    })
 
-        rows = (lqs.values('region', 'reports__animal__name_kor')
-                    .annotate(count=Count('reports__id'))
-                    .order_by('region', '-count'))
-        data = [{
-            'region': r['region'] or '미상',
-            'animal': r['reports__animal__name_kor'] or '미상',
-            'count': r['count']
-        } for r in rows]
-        return Response(data)
+
+# ===== 지역 × 동물별 신고 건수 (스택 바) =====
+@action(detail=False, methods=['get'], url_path='stats/region-by-animal')
+def stats_region_by_animal(self, request):
+    """
+    GET /api/reports/stats/region-by-animal
+    응답: [{ "city": "서울", "animal": "고라니", "count": 10 }, ...]
+    """
+    qs = self.filter_queryset(self.get_queryset())
+    lqs = Location.objects.filter(id__in=qs.values('location_id'))
+
+    rows = (
+        lqs.values('city', 'reports__animal__name_kor')
+        .annotate(count=Count('reports__id'))
+        .order_by('city', '-count')
+    )
+
+    # 1️⃣ 도시별 총 count 집계
+    city_totals = {}
+    for r in rows:
+        city = r['city'] or '미상'
+        city_totals[city] = city_totals.get(city, 0) + r['count']
+
+    # 2️⃣ 상위 4개 도시 + 기타
+    top4_cities = sorted(city_totals.items(), key=lambda x: x[1], reverse=True)[:4]
+    top4_names = [r[0] for r in top4_cities]
+
+    data = []
+    etc_city_animals = {}  # 기타 도시 → 동물별 합산
+
+    # 3️⃣ 각 도시별 동물 집계
+    for city in set(r['city'] or '미상' for r in rows):
+        city_rows = [r for r in rows if (r['city'] or '미상') == city]
+
+        # 동물별 합산
+        animal_counts = {}
+        for r in city_rows:
+            animal = r['reports__animal__name_kor'] or '미상'
+            animal_counts[animal] = animal_counts.get(animal, 0) + r['count']
+
+        # 동물 Top4 + 기타
+        sorted_animals = sorted(animal_counts.items(), key=lambda x: x[1], reverse=True)
+        top4_animals = sorted_animals[:4]
+        other_animals = sorted_animals[4:]
+        etc_animal_count = sum(v for _, v in other_animals)
+
+        final_animals = top4_animals[:]
+        if etc_animal_count > 0:
+            final_animals.append(("기타", etc_animal_count))
+
+        # 도시 Top4 + 기타 분류
+        if city in top4_names:
+            for animal, cnt in final_animals:
+                data.append({
+                    "city": city,
+                    "animal": animal,
+                    "count": cnt
+                })
+        else:
+            for animal, cnt in final_animals:
+                etc_city_animals[animal] = etc_city_animals.get(animal, 0) + cnt
+
+    # 4️⃣ 기타 도시 합산
+    for animal, cnt in etc_city_animals.items():
+        data.append({
+            "city": "기타",
+            "animal": animal,
+            "count": cnt
+        })
+
+    return Response(data)
+
 
 class NotificationViewSet(mixins.ListModelMixin,
                           mixins.CreateModelMixin,   # 생성 가능

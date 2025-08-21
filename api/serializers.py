@@ -101,7 +101,6 @@ class ReportSerializer(serializers.ModelSerializer):
     report_id   = serializers.IntegerField(source='id', read_only=True)
     animal_name = serializers.SerializerMethodField(read_only=True)
 
-    # 🔹 Report → Location FK
     location_id = serializers.PrimaryKeyRelatedField(
         source='location',
         queryset=Location.objects.all(),
