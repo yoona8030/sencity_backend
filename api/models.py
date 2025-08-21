@@ -4,6 +4,14 @@ from django.utils import timezone
 from datetime import datetime
 from django.db import models
 
+class Admin(models.Model):
+    email = models.EmailField(unique=True)
+    name = models.CharField(max_length=100)
+    password = models.CharField(max_length=128)  # 실제 서비스에서는 해싱 필수
+
+    def __str__(self):
+        return self.name
+    
 class User(AbstractUser):
     email = models.EmailField(unique=True)
     telphone = models.CharField(max_length=20, blank=True)
@@ -50,7 +58,6 @@ class SearchHistory(models.Model):
         verbose_name_plural = 'SearchHistory'
         ordering = ['-searched_at']
 
-
 class Location(models.Model):
     latitude = models.DecimalField(max_digits=9, decimal_places=6, db_index=True)
     longitude = models.DecimalField(max_digits=9, decimal_places=6, db_index=True)
@@ -75,6 +82,31 @@ class Location(models.Model):
 
     def __str__(self):
         return f"Location#{self.id} - {self.region or self.address or f'{self.latitude},{self.longitude}'}"
+
+class SavedPlace(models.Model):
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='saved_places',
+        db_index=True,
+    )
+    name = models.CharField(max_length=100)  # 장소 이름 (사용자가 붙인 메모 등)
+    location = models.ForeignKey(
+        Location,
+        on_delete=models.CASCADE,
+        related_name='saved_places',
+        db_index=True,
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['user', 'created_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} saved {self.name}"
 
 class Report(models.Model):
     STATUS_CHOICES = [
@@ -132,20 +164,39 @@ class Notification(models.Model):
         ('single', '개별 알림'),
     ]
 
-    user = models.ForeignKey(
-        'api.User',
-        on_delete=models.CASCADE,
-        related_name='notifications',
-        db_index=True,
-    )
-
-    type = models.CharField(max_length=10, choices=TYPE_CHOICES, db_index=True)
     STATUS_CHANGE_CHOICES = [
         ('checking->on_hold', '접수 완료 → 보류'),
         ('checking->completed', '접수 완료 → 답변 완료'),
         ('on_hold->completed', '보류 → 답변 완료'),
     ]
+
+    user = models.ForeignKey(
+        'api.User',
+        on_delete=models.CASCADE,
+        related_name='notifications',
+        db_index=True,
+        blank=True,
+        null=True, # 전체 공지 지원
+    )
+
+    admin = models.ForeignKey(
+        'api.Admin',   # <- 이제 Admin 테이블 참조
+        on_delete=models.SET_NULL,
+        null=True,       # ← 이거 반드시 필요
+        blank=True,
+        related_name='notifications',
+    )
+
+    type = models.CharField(max_length=10, choices=TYPE_CHOICES, db_index=True)
+    
     reply = models.TextField(null=True, blank=True)
+    status_change = models.CharField(
+        max_length=20,
+        choices=STATUS_CHANGE_CHOICES,
+        null=True,
+        blank=True,
+        db_index=True,
+    )
     created_at = models.DateTimeField(default=timezone.now, db_index=True)
 
     class Meta:
@@ -155,7 +206,7 @@ class Notification(models.Model):
         ]
 
     def __str__(self):
-        return f"[{self.get_type_display()}] to {self.user}"
+        return f"[{self.get_type_display()}] {self.user or 'ALL'} by {self.admin or 'SYSTEM'}"
 
 
 class Feedback(models.Model):

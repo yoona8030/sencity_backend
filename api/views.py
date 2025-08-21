@@ -11,13 +11,14 @@ from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from .models import ( User, Animal, SearchHistory, Location, Report, Notification, Feedback, Statistic )
+from .models import ( User, Animal, SearchHistory, Location, Report, Notification, Feedback, Admin, Statistic, SavedPlace )
 from .serializers import (
     UserSerializer, UserSignUpSerializer,
     AnimalSerializer, SearchHistorySerializer,
     LocationSerializer, ReportSerializer,
     NotificationSerializer, FeedbackSerializer,
-    StatisticSerializer
+    StatisticSerializer, SavedPlaceSerializer, 
+    AdminSerializer
 )
 from datetime import datetime
 from .filters import ReportFilter, NotificationFilter
@@ -29,6 +30,7 @@ class SearchHistoryViewSet(
     mixins.CreateModelMixin,
     mixins.DestroyModelMixin,
     viewsets.GenericViewSet
+    
 ):
     """
     GET    /search-history/        → 로그인 유저 자신의 검색 기록 조회
@@ -183,6 +185,21 @@ class LocationViewSet(viewsets.ReadOnlyModelViewSet):
     ordering_fields = ['id', 'latitude', 'longitude']
     ordering = ['-id']
 
+class SavedPlaceViewSet(viewsets.ModelViewSet):
+    serializer_class = SavedPlaceSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_superuser:
+            return SavedPlace.objects.all()  # 관리자: 전체
+        return SavedPlace.objects.filter(user=user)  # 사용자: 본인만
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
 class ReportViewSet(mixins.ListModelMixin,
                     mixins.CreateModelMixin,
                     mixins.RetrieveModelMixin,
@@ -203,6 +220,17 @@ class ReportViewSet(mixins.ListModelMixin,
     filterset_class = ReportFilter
     ordering_fields = ['report_date']
     ordering = ['-report_date']
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = Report.objects.select_related('animal', 'user', 'location')
+        if user.is_superuser:
+            return qs
+        return qs.filter(user=user)   # 일반 사용자 → 본인 신고만
+
+    # 신고 생성 시 user 자동 연결
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
     def perform_create(self, serializer):
         if self.request.user and self.request.user.is_authenticated:
@@ -377,24 +405,19 @@ class NotificationViewSet(mixins.ListModelMixin,
     @action(detail=False, methods=['post'], url_path='send-group')
     def send_group(self, request):
         """
-        그룹 알림 다건 생성
+        그룹 알림 생성 (특정 유저 목록 or 전체 공지)
         body 예시:
         {
-          "user_ids": [12, 34, 56],
-          "status_change": "checking->completed",  # 또는
+          "user_ids": [12, 34, 56],   # 생략 시 전체 공지
+          "status_change": "checking->completed",
           "reply": "공지 내용입니다"
         }
         """
         user_ids = request.data.get('user_ids') or []
-        if not isinstance(user_ids, list) or not user_ids:
-            return Response({'detail': 'user_ids는 비어 있지 않은 리스트여야 합니다.'},
-                            status=status.HTTP_400_BAD_REQUEST)
-
         status_change = request.data.get('status_change')
         reply = request.data.get('reply')
-        created_at   = request.data.get('created_at')
 
-        # status_change 또는 reply 둘 중 하나는 반드시 있어야 함
+        # status_change 또는 reply 둘 중 하나는 반드시 필요
         if not status_change and not reply:
             return Response({'detail': 'status_change 또는 reply 중 하나는 필요합니다.'},
                             status=status.HTTP_400_BAD_REQUEST)
@@ -404,21 +427,40 @@ class NotificationViewSet(mixins.ListModelMixin,
             return Response({'status_change': f"허용되지 않은 값입니다: {status_change}"},
                             status=status.HTTP_400_BAD_REQUEST)
 
+        # 관리자 정보 (예: request.user 가 AdminUser일 경우)
+        admin = None
+        if hasattr(request.user, 'admin'):
+            admin = request.user.admin  # Custom relation
+        # 또는 JWT claim 에서 admin_id 추출해서 Admin.objects.get(id=...)
+
+        # 전체 공지
+        if not user_ids:
+            Notification.objects.create(
+                user=None,
+                type='group',
+                status_change=status_change,
+                reply=reply,
+                admin=admin
+            )
+            return Response({'created': 1}, status=status.HTTP_201_CREATED)
+
+        # 특정 사용자 대상 그룹 공지
         User = Notification._meta.apps.get_model('api', 'User')
         users = User.objects.filter(id__in=user_ids)
 
-        to_create = []
-        for u in users:
-            to_create.append(Notification(
+        to_create = [
+            Notification(
                 user=u,
                 type='group',
                 status_change=status_change,
                 reply=reply,
-                created_at=created_at if created_at else None
-            ))
+                admin=admin
+            ) for u in users
+        ]
         Notification.objects.bulk_create(to_create)
 
         return Response({'created': len(to_create)}, status=status.HTTP_201_CREATED)
+
     
 class FeedbackViewSet(viewsets.ModelViewSet):
     """
@@ -479,3 +521,16 @@ def animal_info(request):
             {"message": "해당 동물 정보가 없습니다."},
             status=status.HTTP_404_NOT_FOUND
         )
+    
+class AdminViewSet(mixins.ListModelMixin,
+                   mixins.CreateModelMixin,
+                   mixins.RetrieveModelMixin,
+                   mixins.UpdateModelMixin,
+                   mixins.DestroyModelMixin,
+                   viewsets.GenericViewSet):
+    """
+    Admin CRUD
+    """
+    queryset = Admin.objects.all()
+    serializer_class = AdminSerializer
+    permission_classes = [IsAdminUser]  # DRF 기본 관리자 권한

@@ -1,9 +1,12 @@
 # api/serializers.py
 from rest_framework import serializers
+from rest_framework import viewsets
+from rest_framework.permissions import IsAuthenticated
+from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.contrib.auth import get_user_model
 from .models import (
     Animal, SearchHistory, Location, Report,
-    Notification, Feedback, Statistic
+    Notification, Feedback, Admin, Statistic, SavedPlace
 )
 
 User = get_user_model()
@@ -96,6 +99,11 @@ class LocationSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['location_id']
 
+class SavedPlaceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SavedPlace
+        fields = '__all__'
+        read_only_fields = ['user']
 
 class ReportSerializer(serializers.ModelSerializer):
     report_id   = serializers.IntegerField(source='id', read_only=True)
@@ -111,9 +119,7 @@ class ReportSerializer(serializers.ModelSerializer):
 
     user_id = serializers.PrimaryKeyRelatedField(
         source='user',
-        queryset=User.objects.all(),
-        write_only=True,
-        required=False
+        read_only=True
     )
     animal_id = serializers.PrimaryKeyRelatedField(
         source='animal',
@@ -133,7 +139,7 @@ class ReportSerializer(serializers.ModelSerializer):
             'location_id',  # 쓰기
             'location',     # 읽기
         ]
-        read_only_fields = ['report_id', 'animal_name', 'location']
+        read_only_fields = ['report_id', 'animal_name', 'location', 'user_id']
 
     def get_animal_name(self, obj):
         return getattr(obj.animal, 'name_kor', str(obj.animal))
@@ -146,23 +152,29 @@ class ReportSerializer(serializers.ModelSerializer):
         
 class NotificationSerializer(serializers.ModelSerializer):
     notification_id = serializers.IntegerField(source='id', read_only=True)
+
     user_id = serializers.PrimaryKeyRelatedField(
         source='user',
         queryset=Notification._meta.apps.get_model('api', 'User').objects.all(),
-        write_only=True
+        write_only=True,
+        allow_null=True,
+        required=False
     )
+
+    admin_id = serializers.PrimaryKeyRelatedField(source='admin', queryset=Admin.objects.all())
 
     class Meta:
         model = Notification
         fields = [
             'notification_id',
             'user_id',
+            'admin_id',
             'type',           # 'group' | 'single'
             'status_change',  # 선택
             'reply',          # 선택
             'created_at', 
         ]
-        read_only_fields = ['notification_id', 'created_at', ]
+        read_only_fields = ['notification_id', 'created_at', 'admin_id']
 
     def validate(self, attrs):
         t = attrs.get('type') or getattr(self.instance, 'type', None)
@@ -176,6 +188,10 @@ class NotificationSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({'detail': "status_change 또는 reply 중 하나는 반드시 포함해야 합니다."})
         if sc and sc not in dict(Notification.STATUS_CHANGE_CHOICES):
             raise serializers.ValidationError({'status_change': f"허용되지 않은 값입니다: {sc}"})
+
+        # 그룹 알림인데 user가 지정된 경우 → 정책에 따라 막을 수도 있음
+        if t == 'group' and attrs.get('user') is not None:
+            raise serializers.ValidationError({'user_id': "group 알림에는 user_id를 지정할 수 없습니다."})
 
         return attrs
 
@@ -207,3 +223,9 @@ class StatisticSerializer(serializers.ModelSerializer):
             'completed', 'incomplete'
         )
         read_only_fields = ('id',)
+
+class AdminSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Admin
+        fields = ['id', 'email', 'name', 'created_at']
+        read_only_fields = ['id', 'created_at']
