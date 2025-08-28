@@ -59,3 +59,6 @@ reports_raw.csv
 # OS
 .DS_Store
 Thumbs.db
+
+fixtures/reports_staging.csv
+fixtures/reports_staging.csv
