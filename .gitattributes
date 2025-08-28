@@ -15,5 +15,3 @@
 *.jpeg binary
 *.gif binary
 *.pdf binary
-fixtures/*.sqlite filter=lfs diff=lfs merge=lfs -text
-fixtures/*.sqlite3 filter=lfs diff=lfs merge=lfs -text

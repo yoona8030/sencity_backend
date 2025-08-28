@@ -17,6 +17,8 @@ media/
 staticfiles/
 .env
 .env.*
+# !fixtures/*.sqlite
+# !fixtures/*.sqlite3
 
 # Virtualenv
 .venv/
