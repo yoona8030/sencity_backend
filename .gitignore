@@ -1,0 +1,58 @@
+# --- Python / Django ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyc
+*.pyd
+*.so
+*.egg-info/
+*.log
+
+# Django
+db.sqlite3
+*.sqlite
+backup_*.sqlite
+*.sqlite3
+media/
+staticfiles/
+.env
+.env.*
+
+# Virtualenv
+.venv/
+venv*/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+
+# Node / build (혹시 있을 경우)
+node_modules/
+dist/
+build/
+
+# Data / Artifacts
+PetImages*/
+converted_savedmodel/
+dashboard/vision/
+external/**/outputs/
+*.h5
+*.hdf5
+*.pb
+*.tflite
+*.pt
+*.onnx
+*.ckpt
+*.zip
+*.tar
+*.tar.gz
+
+# CSV 샘플/시드
+*sample.csv
+*seed.csv
+reports_raw.csv
+
+# OS
+.DS_Store
+Thumbs.db

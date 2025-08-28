@@ -1,16 +1,28 @@
 # api/models.py
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
+from django.db.models import Q  
 from datetime import datetime
 from django.db import models
+from django.conf import settings
 
 class Admin(models.Model):
     email = models.EmailField(unique=True)
     name = models.CharField(max_length=100)
     password = models.CharField(max_length=128)  # 실제 서비스에서는 해싱 필수
 
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='admin',
+        null=True, blank=True   # ⚠️ 마이그레이션 충돌 피하려면 필수
+    )
+
+    display_name = models.CharField(max_length=64, blank=True)
+    created_at = models.DateTimeField(default=timezone.now)   # auto_now_add 대신 default 지정
+
     def __str__(self):
-        return self.name
+        return self.display_name or f'Admin({self.email})'
     
 class User(AbstractUser):
     email = models.EmailField(unique=True)
@@ -85,29 +97,33 @@ class Location(models.Model):
 
 class SavedPlace(models.Model):
     user = models.ForeignKey(
-        User,
+        settings.AUTH_USER_MODEL,   # ← 여기만 수정
         on_delete=models.CASCADE,
         related_name='saved_places',
         db_index=True,
     )
-    name = models.CharField(max_length=100)  # 장소 이름 (사용자가 붙인 메모 등)
+    name = models.CharField(max_length=100)  # 장소 이름/별칭
     location = models.ForeignKey(
-        Location,
+        'api.Location',
         on_delete=models.CASCADE,
         related_name='saved_places',
         db_index=True,
     )
+    latitude  = models.FloatField(null=True, blank=True)
+    longitude = models.FloatField(null=True, blank=True)
+    client_id = models.CharField(max_length=100, blank=True, null=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ['-created_at']
-        indexes = [
-            models.Index(fields=['user', 'created_at']),
+        constraints = [
+            # ⚠️ PostgreSQL이 아니면 deferrable 제거!
+            models.UniqueConstraint(fields=['user', 'client_id'],
+                                    name='uniq_user_client_id')
         ]
 
     def __str__(self):
-        return f"{self.user.username} saved {self.name}"
-
+        return f"{self.user} saved {self.name}"
+    
 class Report(models.Model):
     STATUS_CHOICES = [
         ('checking',  '접수 완료'),
@@ -161,7 +177,7 @@ class Report(models.Model):
 class Notification(models.Model):
     TYPE_CHOICES = [
         ('group', '그룹 알림'),
-        ('single', '개별 알림'),
+        ('individual', '개별 알림'),
     ]
 
     STATUS_CHANGE_CHOICES = [
@@ -170,14 +186,9 @@ class Notification(models.Model):
         ('on_hold->completed', '보류 → 답변 완료'),
     ]
 
-    user = models.ForeignKey(
-        'api.User',
-        on_delete=models.CASCADE,
-        related_name='notifications',
-        db_index=True,
-        blank=True,
-        null=True, # 전체 공지 지원
-    )
+    user = models.ForeignKey('api.User', on_delete=models.CASCADE,
+                             related_name='notifications', db_index=True,
+                             null=True, blank=True)
 
     admin = models.ForeignKey(
         'api.Admin',   # <- 이제 Admin 테이블 참조
@@ -191,11 +202,8 @@ class Notification(models.Model):
     
     reply = models.TextField(null=True, blank=True)
     status_change = models.CharField(
-        max_length=20,
-        choices=STATUS_CHANGE_CHOICES,
-        null=True,
-        blank=True,
-        db_index=True,
+        max_length=24, choices=STATUS_CHANGE_CHOICES,
+        null=True, blank=True, db_index=True,
     )
     created_at = models.DateTimeField(default=timezone.now, db_index=True)
 
@@ -204,9 +212,24 @@ class Notification(models.Model):
         indexes = [
             models.Index(fields=['user', 'type', 'created_at']),
         ]
+        constraints = [
+        # 개별 알림(individual) → user 필수
+        models.CheckConstraint(
+            name='notif_individual_requires_user',
+            check=(Q(type='individual') & Q(user__isnull=False)) | ~Q(type='individual'),
+        ),
+        # 그룹 공지(group) → user 금지
+        models.CheckConstraint(
+            name='notif_group_requires_no_user',
+            check=(Q(type='group') & Q(user__isnull=True)) | ~Q(type='group'),
+        ),
+        ]
 
     def __str__(self):
-        return f"[{self.get_type_display()}] {self.user or 'ALL'} by {self.admin or 'SYSTEM'}"
+        base = f'[{self.type}]'
+        if self.type == 'individual' and self.user_id:
+            base += f' to {self.user_id}'
+        return base
 
 
 class Feedback(models.Model):
@@ -269,3 +292,19 @@ class Statistic(models.Model):
         verbose_name = 'Statistic'
         verbose_name_plural = 'Statistic'
         ordering = ['-state_year', '-state_month']
+
+
+class Profile(models.Model):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='profile'
+    )
+    address = models.CharField(max_length=255, blank=True)
+    phone = models.CharField(max_length=20, blank=True)
+    consent_terms = models.BooleanField(default=False)
+    consent_location = models.BooleanField(default=False)
+    consent_marketing = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f'{self.user} profile'

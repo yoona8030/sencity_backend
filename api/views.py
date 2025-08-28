@@ -1,36 +1,60 @@
 from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Q, Count
 from django.http import JsonResponse
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import mixins, viewsets, status
+from rest_framework import mixins, viewsets, status, permissions
+from rest_framework.authentication import SessionAuthentication
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser, IsAuthenticatedOrReadOnly
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
+from rest_framework.request import Request
 from rest_framework.views import APIView
+from .utils import is_admin
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from .models import ( User, Animal, SearchHistory, Location, Report, Notification, Feedback, Admin, Statistic, SavedPlace )
+from .models import ( User, Animal, SearchHistory, Location, Report, Notification, Feedback, Admin, Statistic, SavedPlace, Profile )
 from .serializers import (
     UserSerializer, UserSignUpSerializer,
     AnimalSerializer, SearchHistorySerializer,
     LocationSerializer, ReportSerializer,
     NotificationSerializer, FeedbackSerializer,
     StatisticSerializer, SavedPlaceSerializer, 
-    AdminSerializer
+    AdminSerializer, ProfileSerializer, 
+    UserProfileSerializer
 )
 from datetime import datetime
 from .filters import ReportFilter, NotificationFilter
 
 User = get_user_model()
 
+def is_admin(user) -> bool:
+    return bool(
+        user and user.is_authenticated and (
+            user.is_staff or user.is_superuser or hasattr(user, 'admin')
+        )
+    )
+
+
+class IsAdminOrReadGroup(permissions.BasePermission):
+    """
+    - SAFE_METHODS(GET/HEAD/OPTIONS): 모두 허용
+      (단, 개별 레코드 접근은 get_queryset 필터로 안전하게 제한)
+    - 쓰기(POST/PUT/PATCH/DELETE): 관리자만 허용
+    """
+    def has_permission(self, request: Request, view) -> bool:
+        if request.method in permissions.SAFE_METHODS:
+            return True
+        return is_admin(request.user)
+
 class SearchHistoryViewSet(
     mixins.ListModelMixin,
     mixins.CreateModelMixin,
     mixins.DestroyModelMixin,
     viewsets.GenericViewSet
-    
 ):
     """
     GET    /search-history/        → 로그인 유저 자신의 검색 기록 조회
@@ -40,33 +64,54 @@ class SearchHistoryViewSet(
     queryset = SearchHistory.objects.all()
     serializer_class = SearchHistorySerializer
     authentication_classes = [JWTAuthentication]
-    permission_classes     = [IsAuthenticated]
-
-    def get_queryset(self):
-        return self.queryset.filter(user=self.request.user).order_by('-id')
-
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
-
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        # 로그인된 사용자 자신의 기록만 반환 (최신순)
         return self.queryset.filter(user=self.request.user).order_by('-id')
 
     def perform_create(self, serializer):
-        # 생성 시 user 필드 자동 연결
         serializer.save(user=self.request.user)
 
 def animal_stats(request):
-    stats = (
-        Report.objects.values("animal__name_kor")
-        .annotate(count=Count("id"))
-        .order_by("-count")
+    # 1) 전체 집계 (동물명 없으면 '미상')
+    rows = (
+        Report.objects.values('animal__name_kor')
+        .annotate(count=Count('id'))
+        .order_by('-count')
     )
-    result = [{"animal": s["animal__name_kor"], "count": s["count"]} for s in stats]
-    return JsonResponse(result, safe=False)
+    full = [
+        {'animal': (r['animal__name_kor'] or '미상'), 'count': r['count']}
+        for r in rows
+    ]
+    # 내림차순 정렬
+    full.sort(key=lambda x: x['count'], reverse=True)
 
+    # 2) '기타'가 DB에 이미 있다면 분리
+    etc_from_db = next((x for x in full if x['animal'] == '기타'), None)
+    non_etc = [x for x in full if x['animal'] != '기타']
+
+    # 3) Top4 + 나머지 합산 → '기타'는 항상 마지막
+    top4 = non_etc[:4]
+    rest = non_etc[4:]
+    etc_sum = (etc_from_db['count'] if etc_from_db else 0) + sum(x['count'] for x in rest)
+
+    data = top4 + ([{'animal': '기타', 'count': etc_sum}] if etc_sum > 0 else [])
+
+    # 4) 기타 상세(Top4에서 제외된 원본 목록)
+    others_detail = sorted(rest, key=lambda x: x['count'], reverse=True)
+
+    return JsonResponse({'data': data, 'others_detail': others_detail})
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def animal_stats_raw(request):
+    rows = (
+        Report.objects.values('animal__name_kor')
+        .annotate(count=Count('id'))
+        .order_by('-count')
+    )
+    data = [{'animal': r['animal__name_kor'] or '미상', 'count': r['count']} for r in rows]
+    return Response(data)
 
 # 지역별 + 동물별 신고 건수
 def region_by_animal_stats(request):
@@ -84,6 +129,18 @@ def region_by_animal_stats(request):
         for s in stats
     ]
     return JsonResponse(result, safe=False)
+
+
+class IsAuthenticatedOrReadGroup(permissions.BasePermission):
+    """
+    - /notifications/?type=group → 로그인 안 해도 읽기 허용 (원하면 막아도 됨)
+    - 그 외(개인 공지/피드백) → 인증 필요
+    """
+    def has_permission(self, request: Request, view) -> bool:
+        qtype = request.query_params.get("type", "").lower()
+        if qtype == "group" and request.method in permissions.SAFE_METHODS:
+            return True
+        return request.user and request.user.is_authenticated
 ############################################################3
 
 
@@ -193,12 +250,11 @@ class SavedPlaceViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         if user.is_superuser:
-            return SavedPlace.objects.all()  # 관리자: 전체
-        return SavedPlace.objects.filter(user=user)  # 사용자: 본인만
+            return SavedPlace.objects.select_related('location').all()
+        return SavedPlace.objects.select_related('location').filter(user=user)
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
-
 
 class ReportViewSet(mixins.ListModelMixin,
                     mixins.CreateModelMixin,
@@ -230,40 +286,37 @@ class ReportViewSet(mixins.ListModelMixin,
 
     # 신고 생성 시 user 자동 연결
     def perform_create(self, serializer):
+        # ← 중복 정의 하나만 남깁니다.
         serializer.save(user=self.request.user)
 
-    def perform_create(self, serializer):
-        if self.request.user and self.request.user.is_authenticated:
-            serializer.save(user=self.request.user)
-        else:
-            serializer.save()
-    def list(self, request, *args, **kwargs):   # ### 수정됨
+    def list(self, request, *args, **kwargs):
         queryset = self.filter_queryset(self.get_queryset())
 
-        from_date = request.query_params.get("from")   # ### 수정됨
-        to_date = request.query_params.get("to")       # ### 수정됨
+        from_date = request.query_params.get("from")
+        to_date   = request.query_params.get("to")
 
-        if from_date and to_date:                      # ### 수정됨
+        if from_date and to_date:
             try:
                 start = datetime.strptime(from_date, "%Y-%m-%d").date()
-                end = datetime.strptime(to_date, "%Y-%m-%d").date()
+                end   = datetime.strptime(to_date,   "%Y-%m-%d").date()
 
-                # report_date 이 DateField 라면 __gte/__lte, 
-                # DateTimeField 라면 __date__gte/__date__lte 사용
+                # report_date 필드 타입에 맞게 선택:
+                #  - DateField면 __gte / __lte
+                #  - DateTimeField면 __date__gte / __date__lte
                 queryset = queryset.filter(
-                    report_date__date__gte=start,      # ### 수정됨
-                    report_date__date__lte=end         # ### 수정됨
+                    report_date__date__gte=start,
+                    report_date__date__lte=end
                 )
             except ValueError:
                 pass
 
-        page = self.paginate_queryset(queryset)        # ### 수정됨
-        if page is not None:                           # ### 수정됨
+        page = self.paginate_queryset(queryset)
+        if page is not None:
             serializer = self.get_serializer(page, many=True)
             return self.get_paginated_response(serializer.data)
 
         serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)               # ### 수정됨
+        return Response(serializer.data)
 
     # ===== 기존 요약 통계 =====
     @action(detail=False, methods=['get'], url_path='stats')
@@ -274,7 +327,6 @@ class ReportViewSet(mixins.ListModelMixin,
         by_status = dict(qs.values_list('status').annotate(c=Count('id')))
         by_animal = dict(qs.values_list('animal__name_kor').annotate(c=Count('id')))
 
-        # Location 기반 집계
         lqs = Location.objects.filter(id__in=qs.values('location_id'))
         by_region = dict(lqs.values_list('region').annotate(c=Count('id')))
 
@@ -287,102 +339,86 @@ class ReportViewSet(mixins.ListModelMixin,
         return Response(data)
 
     # ===== 동물별 신고 건수 (도넛) =====
-@action(detail=False, methods=['get'], url_path='stats/animal')
-def stats_animal(self, request):
-    qs = self.filter_queryset(self.get_queryset())
-    rows = (
-        qs.values('animal__name_kor')
-          .annotate(count=Count('id'))
-          .order_by('-count')
-    )
+    @action(detail=False, methods=['get'], url_path='stats/animal')
+    def stats_animal(self, request):
+        qs = self.filter_queryset(self.get_queryset())
+        rows = (
+            qs.values('animal__name_kor')
+              .annotate(count=Count('id'))
+              .order_by('-count')
+        )
 
-    # ✅ Top4 + 기타
-    top4 = rows[:4]
-    top_animals = [r['animal__name_kor'] or '미상' for r in top4]
-    etc_count = sum(r['count'] for r in rows if (r['animal__name_kor'] or '미상') not in top_animals)
+        top4 = rows[:4]
+        top_animals = [r['animal__name_kor'] or '미상' for r in top4]
+        etc_count = sum(
+            r['count'] for r in rows
+            if (r['animal__name_kor'] or '미상') not in top_animals
+        )
 
-    data = [{'animal': r['animal__name_kor'] or '미상', 'count': r['count']} for r in top4]
-    if etc_count > 0:
-        data.append({'animal': '기타', 'count': etc_count})
+        data = [
+            {'animal': r['animal__name_kor'] or '미상', 'count': r['count']}
+            for r in top4
+        ]
+        if etc_count > 0:
+            data.append({'animal': '기타', 'count': etc_count})
 
-    # 👉 프론트에서 legend 색상 순서를 동일하게 쓰기 위해 Top4 + 기타 순서 고정
-    return Response({
-        "top_animals": top_animals,  # 순서 정보 (예: ["고라니","너구리","멧토끼","여우"])
-        "data": data
-    })
+        return Response({"top_animals": top_animals, "data": data})
 
+    # ===== 지역 × 동물별 신고 건수 (스택 바) =====
+    @action(detail=False, methods=['get'], url_path='stats/region-by-animal')
+    def stats_region_by_animal(self, request):
+        """
+        GET /api/reports/stats/region-by-animal
+        응답: [{ "city": "서울", "animal": "고라니", "count": 10 }, ...]
+        """
+        qs  = self.filter_queryset(self.get_queryset())
+        lqs = Location.objects.filter(id__in=qs.values('location_id'))
 
-# ===== 지역 × 동물별 신고 건수 (스택 바) =====
-@action(detail=False, methods=['get'], url_path='stats/region-by-animal')
-def stats_region_by_animal(self, request):
-    """
-    GET /api/reports/stats/region-by-animal
-    응답: [{ "city": "서울", "animal": "고라니", "count": 10 }, ...]
-    """
-    qs = self.filter_queryset(self.get_queryset())
-    lqs = Location.objects.filter(id__in=qs.values('location_id'))
+        rows = (
+            lqs.values('city', 'reports__animal__name_kor')
+               .annotate(count=Count('reports__id'))
+               .order_by('city', '-count')
+        )
 
-    rows = (
-        lqs.values('city', 'reports__animal__name_kor')
-        .annotate(count=Count('reports__id'))
-        .order_by('city', '-count')
-    )
+        city_totals = {}
+        for r in rows:
+            city = r['city'] or '미상'
+            city_totals[city] = city_totals.get(city, 0) + r['count']
 
-    # 1️⃣ 도시별 총 count 집계
-    city_totals = {}
-    for r in rows:
-        city = r['city'] or '미상'
-        city_totals[city] = city_totals.get(city, 0) + r['count']
+        top4_cities = sorted(city_totals.items(), key=lambda x: x[1], reverse=True)[:4]
+        top4_names  = [r[0] for r in top4_cities]
 
-    # 2️⃣ 상위 4개 도시 + 기타
-    top4_cities = sorted(city_totals.items(), key=lambda x: x[1], reverse=True)[:4]
-    top4_names = [r[0] for r in top4_cities]
+        data = []
+        etc_city_animals = {}
 
-    data = []
-    etc_city_animals = {}  # 기타 도시 → 동물별 합산
+        for city in set((r['city'] or '미상') for r in rows):
+            city_rows = [r for r in rows if (r['city'] or '미상') == city]
 
-    # 3️⃣ 각 도시별 동물 집계
-    for city in set(r['city'] or '미상' for r in rows):
-        city_rows = [r for r in rows if (r['city'] or '미상') == city]
+            animal_counts = {}
+            for r in city_rows:
+                animal = r['reports__animal__name_kor'] or '미상'
+                animal_counts[animal] = animal_counts.get(animal, 0) + r['count']
 
-        # 동물별 합산
-        animal_counts = {}
-        for r in city_rows:
-            animal = r['reports__animal__name_kor'] or '미상'
-            animal_counts[animal] = animal_counts.get(animal, 0) + r['count']
+            sorted_animals = sorted(animal_counts.items(), key=lambda x: x[1], reverse=True)
+            top4_animals   = sorted_animals[:4]
+            other_animals  = sorted_animals[4:]
+            etc_animal_cnt = sum(v for _, v in other_animals)
 
-        # 동물 Top4 + 기타
-        sorted_animals = sorted(animal_counts.items(), key=lambda x: x[1], reverse=True)
-        top4_animals = sorted_animals[:4]
-        other_animals = sorted_animals[4:]
-        etc_animal_count = sum(v for _, v in other_animals)
+            final_animals = top4_animals[:]
+            if etc_animal_cnt > 0:
+                final_animals.append(("기타", etc_animal_cnt))
 
-        final_animals = top4_animals[:]
-        if etc_animal_count > 0:
-            final_animals.append(("기타", etc_animal_count))
+            if city in top4_names:
+                for animal, cnt in final_animals:
+                    data.append({"city": city, "animal": animal, "count": cnt})
+            else:
+                for animal, cnt in final_animals:
+                    etc_city_animals[animal] = etc_city_animals.get(animal, 0) + cnt
 
-        # 도시 Top4 + 기타 분류
-        if city in top4_names:
-            for animal, cnt in final_animals:
-                data.append({
-                    "city": city,
-                    "animal": animal,
-                    "count": cnt
-                })
-        else:
-            for animal, cnt in final_animals:
-                etc_city_animals[animal] = etc_city_animals.get(animal, 0) + cnt
+        for animal, cnt in etc_city_animals.items():
+            data.append({"city": "기타", "animal": animal, "count": cnt})
 
-    # 4️⃣ 기타 도시 합산
-    for animal, cnt in etc_city_animals.items():
-        data.append({
-            "city": "기타",
-            "animal": animal,
-            "count": cnt
-        })
-
-    return Response(data)
-
+        return Response(data)
 
 class NotificationViewSet(mixins.ListModelMixin,
                           mixins.CreateModelMixin,   # 생성 가능
@@ -393,7 +429,7 @@ class NotificationViewSet(mixins.ListModelMixin,
     """
     Notification CRUD + 그룹 전송 기능
     """
-    queryset = Notification.objects.select_related('user').all()
+    queryset = Notification.objects.select_related('user', 'admin').all()
     serializer_class = NotificationSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
 
@@ -401,6 +437,31 @@ class NotificationViewSet(mixins.ListModelMixin,
     filterset_class = NotificationFilter
     ordering_fields = ['id', 'created_at']
     ordering = ['-created_at']
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        qtype = (self.request.query_params.get('type') or '').lower().strip()
+
+        if not user.is_authenticated:
+            # 로그인 안 된 경우 → 전체 공지만
+            qs = qs.filter(type='group')
+        elif is_admin(user):
+            # 관리자: 제한 없음
+            pass
+        else:
+            # 일반 사용자: group + 본인 individual
+            qs = qs.filter(Q(type='group') | Q(type='individual', user=user))
+
+        # ?type=group 또는 ?type=individual 파라미터가 오면 강제 필터링
+        if qtype in ('group', 'individual'):
+            qs = qs.filter(type=qtype)
+
+        return qs.order_by('-created_at')
+        
+    def perform_create(self, serializer):
+        admin_obj = getattr(self.request.user, 'admin', None) if is_admin(self.request.user) else None
+        serializer.save(admin=admin_obj)
 
     @action(detail=False, methods=['post'], url_path='send-group')
     def send_group(self, request):
@@ -423,68 +484,74 @@ class NotificationViewSet(mixins.ListModelMixin,
                             status=status.HTTP_400_BAD_REQUEST)
 
         # status_change 값 검증
-        if status_change and status_change not in dict(Notification.STATUS_CHANGE_CHOICES):
-            return Response({'status_change': f"허용되지 않은 값입니다: {status_change}"},
-                            status=status.HTTP_400_BAD_REQUEST)
-
+        if status_change:
+            valid = dict(Notification.STATUS_CHANGE_CHOICES)
+            if status_change not in valid:
+                return Response({'status_change': f'허용되지 않은 값입니다: {status_change}'},
+                                status=status.HTTP_400_BAD_REQUEST)
+            
         # 관리자 정보 (예: request.user 가 AdminUser일 경우)
-        admin = None
-        if hasattr(request.user, 'admin'):
-            admin = request.user.admin  # Custom relation
+        admin_obj = getattr(request.user, 'admin', None) if is_admin(request.user) else None
         # 또는 JWT claim 에서 admin_id 추출해서 Admin.objects.get(id=...)
 
         # 전체 공지
         if not user_ids:
+            # 전체 공지 → group, user=None
             Notification.objects.create(
-                user=None,
                 type='group',
+                user=None,
                 status_change=status_change,
                 reply=reply,
-                admin=admin
+                admin=admin_obj
             )
             return Response({'created': 1}, status=status.HTTP_201_CREATED)
 
         # 특정 사용자 대상 그룹 공지
-        User = Notification._meta.apps.get_model('api', 'User')
         users = User.objects.filter(id__in=user_ids)
-
         to_create = [
             Notification(
+                type='individual',
                 user=u,
-                type='group',
                 status_change=status_change,
                 reply=reply,
-                admin=admin
+                admin=admin_obj
             ) for u in users
         ]
         Notification.objects.bulk_create(to_create)
-
         return Response({'created': len(to_create)}, status=status.HTTP_201_CREATED)
 
-    
 class FeedbackViewSet(viewsets.ModelViewSet):
     """
-    피드백 조회/등록 (관리자 혹은 신고자)
+    피드백 조회/등록 (관리자: 전체 / 일반 사용자: 본인 것만)
     """
     queryset = Feedback.objects.select_related('report', 'user', 'admin').all()
     serializer_class = FeedbackSerializer
     authentication_classes = [JWTAuthentication]
-    permission_classes     = [IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     filter_backends = [DjangoFilterBackend, OrderingFilter]
-    filterset_fields = ['report_id', 'user_id', 'admin_id']
+    # FK 표준 필터 (?report=, ?user=, ?admin= 로 PK 필터)
+    filterset_fields = ['report', 'user', 'admin']
     ordering_fields = ['feedback_datetime', 'feedback_id']
     ordering = ['-feedback_datetime']
 
-    # def get_queryset(self):
-    #     qs = Feedback.objects.all().order_by('-feedback_datetime')
-    #     # non-staff: own feedback only
-    #     if not self.request.user.is_staff:
-    #         qs = qs.filter(user=self.request.user)
-    #     return qs
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
 
-    # def perform_create(self, serializer):
-    #     serializer.save(user=self.request.user)
+        if not is_admin(user):
+            qs = qs.filter(user=user)
+
+        # 프론트 호환: ?user_id= 도 지원 (일반 유저는 자기 범위 안에서만)
+        user_id = self.request.query_params.get('user_id')
+        if user_id:
+            qs = qs.filter(user_id=user_id)
+
+        return qs
+
+    def perform_create(self, serializer):
+        # 생성 시 작성자(user)는 토큰 주체로 고정
+        serializer.save(user=self.request.user)
 
 
 class StatisticViewSet(viewsets.ReadOnlyModelViewSet):
@@ -534,3 +601,53 @@ class AdminViewSet(mixins.ListModelMixin,
     queryset = Admin.objects.all()
     serializer_class = AdminSerializer
     permission_classes = [IsAdminUser]  # DRF 기본 관리자 권한
+
+
+class MeProfileView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        serializer = ProfileSerializer(profile)
+        return Response(serializer.data)
+
+    def put(self, request):
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        serializer = ProfileSerializer(profile, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class ChangePasswordView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        current_password = request.data.get('current_password') or ''
+        new_password = request.data.get('new_password') or ''
+
+        if not request.user.check_password(current_password):
+            return Response({'detail': '현재 비밀번호가 올바르지 않습니다.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            validate_password(new_password, user=request.user)
+        except DjangoValidationError as e:
+            return Response({'detail': e.messages}, status=status.HTTP_400_BAD_REQUEST)
+
+        request.user.set_password(new_password)
+        request.user.save(update_fields=['password'])
+        return Response({'detail': '비밀번호가 변경되었습니다.'}, status=status.HTTP_200_OK)
+    
+@api_view(["GET", "PUT", "PATCH"])  # ← PUT 추가
+@permission_classes([IsAuthenticated])
+def user_profile(request):
+    user = request.user
+    if request.method == "GET":
+        return Response(UserProfileSerializer(user).data)
+
+    print("[user_profile] incoming data:", dict(request.data))  # 디버깅용
+    ser = UserProfileSerializer(user, data=request.data, partial=True)  # 부분수정
+    ser.is_valid(raise_exception=True)
+    ser.save()
+    return Response(ser.data, status=status.HTTP_200_OK)
