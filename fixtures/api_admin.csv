@@ -1,4 +1,0 @@
-id,email,name,password,created_at,display_name,user_id
-56,admin56@example.com,admin56,!,"2025-08-28 04:37:21","Admin 56",56
-57,admin57@example.com,admin57,!,"2025-08-28 04:37:21","Admin 57",57
-58,admin58@example.com,admin58,!,"2025-08-28 04:37:21","Admin 58",58
