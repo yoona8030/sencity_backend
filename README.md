@@ -2,7 +2,7 @@
 cd C:\백엔드 폴더
 
 레포 클론
-git clone https://github.com/주.git
+git clone https://github.com/주소.git
 
 cd sencity_backend
 
