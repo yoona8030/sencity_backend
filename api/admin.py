@@ -122,10 +122,13 @@ class NotificationAdmin(admin.ModelAdmin):
 
 @admin.register(Feedback)
 class FeedbackAdmin(admin.ModelAdmin):
-    list_display  = ('feedback_id', 'report', 'user', 'admin', 'feedback_datetime')
-    list_filter   = ('feedback_datetime',)
-    search_fields = ('content', 'user__username', 'admin__username')
-    ordering      = ('-feedback_datetime',)
+    list_display = ("feedback_id","report_id","report","user","admin","feedback_datetime")
+    ordering = ("-feedback_datetime","-feedback_id")
+    list_select_related = ("report","user","admin")
+    def get_queryset(self, request):
+        return (super().get_queryset(request)
+                .select_related("report","user","admin")
+                .distinct())
 
 @admin.register(Statistic)
 class StatisticAdmin(admin.ModelAdmin):

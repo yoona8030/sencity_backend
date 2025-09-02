@@ -3,6 +3,8 @@ from rest_framework import serializers
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
+from django.apps import apps
+from urllib.parse import urlencode
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 from .models import (
@@ -12,6 +14,8 @@ from .models import (
 )
 
 User = get_user_model()
+SearchHistory = apps.get_model('api', 'SearchHistory')
+Animal = apps.get_model('api', 'Animal')
 
 
 class UserSerializer(serializers.ModelSerializer):
@@ -49,41 +53,69 @@ class UserSignUpSerializer(serializers.ModelSerializer):
         return user
 
 class AnimalSerializer(serializers.ModelSerializer):
+    # 프론트가 image_url 대신 image/imageUrl를 기대해도 깨지지 않도록 alias 제공
+    image = serializers.CharField(source='image_url', read_only=True)
+    imageUrl = serializers.CharField(source='image_url', read_only=True)
+    proxied_image_url = serializers.SerializerMethodField()
+
     class Meta:
         model = Animal
-        fields = (
+        fields = [
             'id',
-            'name_kor',
-            'name_eng',
-            'image_url',
-            'description',
+            'name_kor', 'name_eng',
+            'image_url', 'image', 'imageUrl',  # ← 세 키 전부 노출
             'features',
-            'precautions',
-        )
-
+            'precautions',  # ← 대처법
+            'description',
+        ]
 
 class SearchHistorySerializer(serializers.ModelSerializer):
+    created_at = serializers.SerializerMethodField()
     animal_info = serializers.SerializerMethodField()
 
     class Meta:
-        model = SearchHistory
-        fields = ('id', 'keyword', 'searched_at', 'animal_info')
-        read_only_fields = ('id', 'searched_at')
+        model = apps.get_model('api','SearchHistory')
+        fields = ['id','keyword','created_at','animal_info']
+
+    def get_created_at(self, obj):
+        # 프로젝트마다 다를 수 있는 생성시각 필드 유연 매핑
+        for name in ('created_at', 'created', 'created_on', 'created_time',
+                     'timestamp', 'searched_at', 'search_datetime'):
+            if hasattr(obj, name):
+                return getattr(obj, name)
+        return None
 
     def get_animal_info(self, obj):
-        try:
-            animal = Animal.objects.get(name_kor=obj.keyword)
-            return {
-                'name_kor':    animal.name_kor,
-                'name_eng':    animal.name_eng,
-                'image_url':   animal.image_url,
-                'features':    animal.features,
-                'precautions': animal.precautions,
-                'description': animal.description,
-            }
-        except Animal.DoesNotExist:
+        a = Animal.objects.filter(name_kor=obj.keyword).order_by('id').first()
+        if not a:
             return None
 
+        feats = getattr(a, 'features', None)
+        if isinstance(feats, list):
+            features = feats
+        elif isinstance(feats, str) and feats.strip():
+            # TextField로 저장된 경우 줄바꿈을 리스트로 정리
+            features = [s.lstrip('- ').strip() for s in feats.splitlines() if s.strip()]
+        else:
+            features = []
+
+        return {
+            'name':        getattr(a, 'name_kor', None),
+            'english':     getattr(a, 'name_eng', None),
+            'image_url':   getattr(a, 'image_url', None),
+            'features':    features,
+            'precautions': getattr(a, 'precautions', None),   # ← 대처법 노출
+            'description': getattr(a, 'description', None),
+        }
+    
+    def get_proxied_image_url(self, obj):
+        if not getattr(obj, 'image_url', None):
+            return None
+        q = urlencode({'url': obj.image_url})
+        # DRF는 기본적으로 request를 context에 넣어줍니다.
+        request = self.context.get('request')
+        path = f'/api/image-proxy/?{q}'
+        return request.build_absolute_uri(path) if request else path
 
 class LocationSerializer(serializers.ModelSerializer):
     location_id = serializers.IntegerField(source='id', read_only=True)
@@ -210,68 +242,79 @@ class ReportSerializer(serializers.ModelSerializer):
 class NotificationSerializer(serializers.ModelSerializer):
     notification_id = serializers.IntegerField(source='id', read_only=True)
 
-    # user_id는 쓰기 가능(개인 알림에서만)하게 유지
-    from django.contrib.auth import get_user_model
-    UserModel = get_user_model()
-    user_id = serializers.PrimaryKeyRelatedField(
+    # ▶ read-only id 필드들 (source 지정하지 마세요: DRF가 알아서 obj.user_id/…를 읽습니다)
+    user_id   = serializers.IntegerField(read_only=True)
+    admin_id  = serializers.IntegerField(read_only=True)
+    report_id = serializers.IntegerField(read_only=True)
+
+    # ▶ write-only 입력용 (개인 알림 생성 시 받기 위함)
+    user_id_in = serializers.PrimaryKeyRelatedField(
         source='user',
-        queryset=UserModel.objects.all(),
+        queryset=User.objects.all(),
         write_only=True,
+        required=False,
         allow_null=True,
-        required=False
     )
 
-    # admin_id는 서버에서 세팅(읽기 전용)으로 통일
-    admin_id = serializers.PrimaryKeyRelatedField(source='admin', read_only=True)
+    # ▶ 표시용
+    user_name    = serializers.SerializerMethodField()
+    animal_name  = serializers.SerializerMethodField()
+    status_label = serializers.SerializerMethodField()
 
     class Meta:
         model = Notification
         fields = [
             'notification_id',
-            'user_id',
-            'admin_id',
-            'type',           # 'group' | 'single'
-            'status_change',  # 선택
-            'reply',          # 선택
-            'created_at',
+            'type', 'created_at',
+            'reply', 'status_change', 'status_label',
+            'user_id', 'admin_id', 'report_id', 'user_id_in',
+            'user_name', 'animal_name',
         ]
-        read_only_fields = ['notification_id', 'created_at', 'admin_id']
+        read_only_fields = ['notification_id', 'created_at', 'user_id', 'admin_id', 'report_id']
+
+    def get_user_name(self, obj):
+        # 우선순위: 알림의 user → 리포트의 user
+        u = getattr(obj, 'user', None) or getattr(getattr(obj, 'report', None), 'user', None)
+        if not u:
+            return '사용자'
+        return u.first_name or u.username or f'사용자 #{u.id}'
+
+    def get_animal_name(self, obj):
+        a = getattr(getattr(obj, 'report', None), 'animal', None)
+        return getattr(a, 'name_kor', None) or '미상'
+
+    def get_status_label(self, obj):
+        return dict(Notification.STATUS_CHANGE_CHOICES).get(obj.status_change)
 
     def validate(self, attrs):
-        # 현재 요청의 type (없으면 기존 인스턴스에서 가져오기)
-        t = attrs.get('type') or getattr(self.instance, 'type', None)
-        usr = attrs.get('user', getattr(self.instance, 'user', None))
+        t    = attrs.get('type') or getattr(self.instance, 'type', None)
+        user = attrs.get('user', getattr(self.instance, 'user', None))
 
-        # 유효값은 'group' 또는 'single' 로 통일
-        if t not in ('group', 'single'):
-            raise serializers.ValidationError({'type': "type은 'group' 또는 'single'이어야 합니다."})
+        if t not in ('group', 'individual'):
+            raise serializers.ValidationError({'type': "type은 'group' 또는 'individual'이어야 합니다."})
+        if t == 'individual' and user is None:
+            raise serializers.ValidationError({'user_id_in': '개인 알림(type=individual)에는 user가 필요합니다.'})
+        if t == 'group' and user is not None:
+            raise serializers.ValidationError({'user_id_in': '그룹 알림(type=group)에는 user가 있으면 안 됩니다.'})
 
-        # 개인 알림(single)에는 user 필수
-        if t == 'single' and not usr:
-            raise serializers.ValidationError({'user': '개인 알림(type=single)에는 user가 필수입니다.'})
-
-        # 그룹 알림(group)에는 user가 있으면 안 됨
-        if t == 'group' and usr:
-            raise serializers.ValidationError({'user': '그룹 알림(type=group)에서는 user를 비워야 합니다.'})
+        # (선택) 관리자 계정이 개인 알림 수신자가 되지 않도록
+        if user is not None and hasattr(user, 'admin') and user.admin_id:
+            raise serializers.ValidationError({'user_id_in': '관리자 계정은 개인 알림 수신자가 될 수 없습니다.'})
 
         sc = attrs.get('status_change') if 'status_change' in attrs else getattr(self.instance, 'status_change', None)
-        rp = attrs.get('reply') if 'reply' in attrs else getattr(self.instance, 'reply', None)
-
+        rp = attrs.get('reply')         if 'reply'         in attrs else getattr(self.instance, 'reply', None)
         if not sc and not rp:
-            raise serializers.ValidationError({'detail': "status_change 또는 reply 중 하나는 반드시 포함해야 합니다."})
-
-        # status_change 값 유효성 (선택)
+            raise serializers.ValidationError({'detail': 'status_change 또는 reply 중 하나는 필요합니다.'})
         if sc and sc not in dict(Notification.STATUS_CHANGE_CHOICES):
-            raise serializers.ValidationError({'status_change': f"허용되지 않은 값입니다: {sc}"})
-
+            raise serializers.ValidationError({'status_change': f'허용되지 않은 값: {sc}'})
         return attrs
-
+    
 class FeedbackSerializer(serializers.ModelSerializer):
     feedback_id = serializers.IntegerField(read_only=True)
-    report_id   = serializers.PrimaryKeyRelatedField(source='report', queryset=Feedback._meta.apps.get_model('api', 'Report').objects.all())
-    user_id     = serializers.PrimaryKeyRelatedField(source='user', queryset=Feedback._meta.apps.get_model('api', 'User').objects.all())
-    admin_id    = serializers.PrimaryKeyRelatedField(source='admin', queryset=Feedback._meta.apps.get_model('api', 'User').objects.all(), allow_null=True, required=False)
-
+    report_id   = serializers.PrimaryKeyRelatedField(source='report', queryset=Report.objects.all())
+    user_id     = serializers.PrimaryKeyRelatedField(source='user', queryset=User.objects.all())
+    admin_id    = serializers.PrimaryKeyRelatedField(source='admin', queryset=User.objects.all(),
+                                                     allow_null=True, required=False)
     class Meta:
         model = Feedback
         fields = [
@@ -283,6 +326,12 @@ class FeedbackSerializer(serializers.ModelSerializer):
             'admin_id',
         ]
         read_only_fields = ["feedback_id", "feedback_datetime"]
+
+    def validate(self, attrs):
+        rep = attrs.get('report') or getattr(self.instance, 'report', None)
+        if rep and Feedback.objects.filter(report=rep).exclude(pk=getattr(self.instance, 'pk', None)).exists():
+            raise serializers.ValidationError("이 보고서에는 이미 피드백이 1건 존재합니다.")
+        return attrs
 
 
 class StatisticSerializer(serializers.ModelSerializer):

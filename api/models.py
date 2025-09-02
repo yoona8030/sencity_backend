@@ -38,7 +38,7 @@ class User(AbstractUser):
         verbose_name_plural = 'Users'
 
 class Animal(models.Model):
-    name_kor = models.CharField(max_length=50)
+    name_kor = models.CharField(max_length=50, unique=True)
     name_eng = models.CharField(max_length=50)
     image_url = models.URLField(blank=True)
     description = models.TextField(blank=True)
@@ -198,8 +198,10 @@ class Notification(models.Model):
         related_name='notifications',
     )
 
-    type = models.CharField(max_length=10, choices=TYPE_CHOICES, db_index=True)
+    report = models.ForeignKey('Report', null=True, blank=True,
+                               on_delete=models.SET_NULL, related_name='notifications')
     
+    type = models.CharField(max_length=10, choices=TYPE_CHOICES, db_index=True)
     reply = models.TextField(null=True, blank=True)
     status_change = models.CharField(
         max_length=24, choices=STATUS_CHANGE_CHOICES,
@@ -263,9 +265,13 @@ class Feedback(models.Model):
     feedback_datetime = models.DateTimeField(default=timezone.now, db_index=True)
 
     class Meta:
-        ordering = ['-feedback_datetime']
+        ordering = ['-feedback_id']
         indexes = [
             models.Index(fields=['report', 'user', 'feedback_datetime']),
+        ]
+        constraints = [
+            # ✅ 한 Report에는 Feedback 1건만 허용
+            models.UniqueConstraint(fields=['report'], name='uniq_one_feedback_per_report'),
         ]
 
     def __str__(self):

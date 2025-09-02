@@ -1,5 +1,6 @@
 # reports filter
 import django_filters
+from django_filters import rest_framework as filters
 from .models import Report, Notification
 
 class ReportFilter(django_filters.FilterSet):
@@ -17,10 +18,11 @@ class ReportFilter(django_filters.FilterSet):
 
 class NotificationFilter(django_filters.FilterSet):
     user_id    = django_filters.NumberFilter(field_name='user_id')
+    report_id = filters.NumberFilter(field_name='report_id')  # 필요시
     type       = django_filters.CharFilter(field_name='type', lookup_expr='iexact')
-    created_after  = django_filters.IsoDateTimeFilter(field_name='created_at', lookup_expr='gte')
-    created_before = django_filters.IsoDateTimeFilter(field_name='created_at', lookup_expr='lte')
+    # created_after  = django_filters.IsoDateTimeFilter(field_name='created_at', lookup_expr='gte')
+    # created_before = django_filters.IsoDateTimeFilter(field_name='created_at', lookup_expr='lte')
 
     class Meta:
         model = Notification
-        fields = ['user_id', 'type', 'created_after', 'created_before']
+        fields = ['user_id', 'type', 'report_id']

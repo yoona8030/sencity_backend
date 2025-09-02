@@ -1,10 +1,11 @@
-# api/urls.py (정리본)
+# api/urls.py
 from django.urls import path, include
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework.routers import DefaultRouter
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+
 from . import views
 from .views import (
-    SignUpView, LoginView, animal_info,
+    SignUpView, LoginView, animal_info, proxy_image_view as image_proxy,
     UserViewSet, AnimalViewSet, SearchHistoryViewSet, LocationViewSet,
     ReportViewSet, NotificationViewSet, FeedbackViewSet, StatisticViewSet,
     AdminViewSet, SavedPlaceViewSet,
@@ -27,22 +28,26 @@ urlpatterns = [
     path('', include(router.urls)),
 
     # JWT
-    path('auth/jwt/create/',  TokenObtainPairView.as_view(), name='jwt-create'),
-    path('auth/jwt/refresh/', TokenRefreshView.as_view(),    name='jwt-refresh'),
+    path('auth/jwt/create/',  TokenObtainPairView.as_view()),
+    path('auth/jwt/refresh/', TokenRefreshView.as_view()),
+    path("api/auth/jwt/refresh/", TokenRefreshView.as_view(), name="jwt-refresh"),
 
     # Auth
-    path('signup/', SignUpView.as_view(), name='signup'),
-    path('login/',  LoginView.as_view(),  name='login'),
+    path('signup/', SignUpView.as_view()),
+    path('login/',  LoginView.as_view()),
+
+    # ✅ 프록시 (프론트의 /api/image-proxy/와 매칭)
+    path('image-proxy/', image_proxy, name='image-proxy'),
 
     # 동물 상세
     path('animal-info/', animal_info, name='animal-info'),
 
-    # 통계(함수 기반: 원본 배열만 반환)
-    path('reports/stats/animal/',            views.animal_stats,            name='animal-stats'),
-    path('reports/stats/region-by-animal/',  views.region_by_animal_stats,  name='region-by-animal-stats'),
-    path('reports/stats/animal-raw/', views.animal_stats_raw, name='animal-stats-raw'),
+    # 통계
+    path('reports/stats/animal/',           views.animal_stats),
+    path('reports/stats/region-by-animal/', views.region_by_animal_stats),
+    path('reports/stats/animal-raw/',       views.animal_stats_raw),
 
-    # 내 프로필/비번 (하나씩만 유지!)
-    path('user/profile/',          MeProfileView.as_view(),     name='user-profile'),
-    path('user/change-password/',  ChangePasswordView.as_view(), name='user-change-password'),
+    # 프로필
+    path('user/profile/',         MeProfileView.as_view()),
+    path('user/change-password/', ChangePasswordView.as_view()),
 ]
