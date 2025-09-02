@@ -1,5 +1,6 @@
 백엔드에서 
 git clone https://github.com/yoona8030/sencity_backend.git
+
 cd sencity_backend
 
 1. 최초 1회
