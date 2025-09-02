@@ -21,6 +21,20 @@ staticfiles/
 # !fixtures/*.sqlite
 # !fixtures/*.sqlite3
 
+# SQLite runtime artifacts (WAL/SHM 포함) + 로컬 버전표시 + 백업본
+.db_version
+db.sqlite3.bak.*
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3-wal
+*.sqlite3-shm
+*.db-wal
+*.db-shm
+
+# Release에서만 쓰는 로컬 파일(실수 커밋 방지)
+db_release.sqlite3
+db_release.sha256.txt
+
 # Virtualenv
 .venv/
 venv*/
@@ -61,5 +75,4 @@ reports_raw.csv
 .DS_Store
 Thumbs.db
 
-fixtures/reports_staging.csv
 fixtures/reports_staging.csv
