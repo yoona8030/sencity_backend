@@ -1,9 +1,5 @@
-백엔드 폴더로 
-cd C:\백엔드 폴더
-
-레포 클론
-git clone https://github.com/주소.git
-
+백엔드에서 
+git clone https://github.com/yoona8030/sencity_backend.git
 cd sencity_backend
 
 1. 최초 1회
