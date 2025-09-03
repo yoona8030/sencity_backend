@@ -67,7 +67,17 @@ class AnimalSerializer(serializers.ModelSerializer):
             'features',
             'precautions',  # ← 대처법
             'description',
+            'proxied_image_url',
         ]
+        
+    def get_proxied_image_url(self, obj):
+        url = getattr(obj, 'image_url', None)
+        if not url:
+            return None
+        q = urlencode({'url': url})
+        req = self.context.get('request')
+        path = f'/api/image-proxy/?{q}'
+        return req.build_absolute_uri(path) if req else path
 
 class SearchHistorySerializer(serializers.ModelSerializer):
     created_at = serializers.SerializerMethodField()
@@ -137,62 +147,149 @@ class LocationLiteSerializer(serializers.ModelSerializer):
         model = Location
         fields = ('id', 'address', 'city', 'district', 'region', 'latitude', 'longitude')
 
-class SavedPlaceSerializer(serializers.ModelSerializer):
-    # ✅ 프론트가 기대하는 응답 필드로 변환 (읽기 전용)
-    type = serializers.CharField(source='name', read_only=True)
-    location = serializers.CharField(source='location.address', read_only=True)
-    lat = serializers.FloatField(source='latitude', read_only=True)
-    lng = serializers.FloatField(source='longitude', read_only=True)
+class SavedPlaceReadSerializer(serializers.ModelSerializer):
+    # 출력 필드: 요청하신 그대로
+    type      = serializers.CharField(source='name', read_only=True)
+    address   = serializers.CharField(source='location.address',   read_only=True)
+    region    = serializers.CharField(source='location.region',    read_only=True, allow_blank=True)
+    city      = serializers.CharField(source='location.city',      read_only=True, allow_blank=True)
+    district  = serializers.CharField(source='location.district',  read_only=True, allow_blank=True)
+    latitude  = serializers.FloatField(source='location.latitude',  read_only=True)   # Location 기준
+    longitude = serializers.FloatField(source='location.longitude', read_only=True)
 
     class Meta:
-        model = SavedPlace
-        fields = ['id', 'type', 'location', 'lat', 'lng', 'client_id', 'created_at']
-        read_only_fields = ['id', 'type', 'location', 'lat', 'lng', 'created_at']
+        model  = SavedPlace
+        fields = [
+            'id', 'type', 'client_id', 'created_at',
+            'address', 'region', 'city', 'district',
+            'latitude', 'longitude',
+        ]
+        read_only_fields = fields
 
-    # 내부 유틸: 위/경도로 Location 확보
-    def _get_or_create_location(self, *, address: str, lat: float, lng: float) -> Location:
+
+class SavedPlaceCreateSerializer(serializers.ModelSerializer):
+    """
+    생성 입력:
+      - location: "123" (PK) 또는 "서울특별시 중구 세종대로 110" (주소 문자열)
+      - 좌표: latitude/longitude 또는 lat/lng 아무거나 OK
+      - type: name의 별칭 (미제공 시 address로 대체)
+    """
+    location  = serializers.CharField(write_only=True)                 # PK 또는 주소 문자열
+    address   = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    region    = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    city      = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    district  = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    latitude  = serializers.FloatField(write_only=True, required=False)
+    longitude = serializers.FloatField(write_only=True, required=False)
+    type      = serializers.CharField(write_only=True, required=False, allow_blank=True)  # name 별칭
+
+    class Meta:
+        model  = SavedPlace
+        fields = [
+            'id', 'name', 'type', 'client_id', 'created_at',
+            'location', 'address', 'region', 'city', 'district',
+            'latitude', 'longitude',
+        ]
+        read_only_fields = ['id', 'created_at']
+
+    # ── 검증: PK 경로 or 주소+좌표 경로 중 하나 충족
+    def validate(self, attrs):
+        loc_raw = (attrs.get('location') or '').strip()
+        addr    = (attrs.get('address')  or '').strip()
+
+        # 프런트에서 lat/lng 키로 보낼 수도 있으니 보정
+        raw = getattr(self, 'initial_data', {}) or {}
+        if attrs.get('latitude') is None and raw.get('lat') is not None:
+            try:
+                attrs['latitude'] = float(raw.get('lat'))
+            except (TypeError, ValueError):
+                pass
+        if attrs.get('longitude') is None and raw.get('lng') is not None:
+            try:
+                attrs['longitude'] = float(raw.get('lng'))
+            except (TypeError, ValueError):
+                pass
+
+        # Case A) location이 숫자(PK)면 좌표 필요 없음
+        if loc_raw.isdigit():
+            return attrs
+
+        # Case B) 주소 문자열 경로 → 좌표 필수
+        use_addr = addr if addr else loc_raw
+        attrs['__resolved_address__'] = use_addr
+        if attrs.get('latitude') is None or attrs.get('longitude') is None:
+            raise serializers.ValidationError({'detail': '주소 문자열로 생성 시 latitude/longitude(또는 lat/lng)가 필수입니다.'})
+        return attrs
+
+    # ── Location 선택/생성/보강
+    def _resolve_location(self, attrs) -> Location:
+        loc_raw = (attrs.get('location') or '').strip()
+
+        # A) PK 경로
+        if loc_raw.isdigit():
+            try:
+                return Location.objects.get(pk=int(loc_raw))
+            except Location.DoesNotExist:
+                raise serializers.ValidationError({'location': f'존재하지 않는 Location PK입니다: {loc_raw}'})
+
+        # B) 주소 문자열 경로
+        address  = attrs.get('__resolved_address__')
+        region   = (attrs.get('region')   or '').strip()
+        city     = (attrs.get('city')     or '').strip()
+        district = (attrs.get('district') or '').strip()
+        lat      = float(attrs.get('latitude'))
+        lng      = float(attrs.get('longitude'))
+
         loc, created = Location.objects.get_or_create(
-            latitude=lat,
-            longitude=lng,
-            defaults={'address': address or ''}  # address가 NULL 금지면 ''로
+            address=address,
+            defaults={
+                'region': region, 'city': city, 'district': district,
+                'latitude': lat,  'longitude': lng,
+            }
         )
-        # 주소가 비어있던 기존 Location이면 채워주기(선택)
-        if not created and not (loc.address or '').strip() and address:
-            loc.address = address
-            loc.save(update_fields=['address'])
+        # 좌표/행정구역 보강
+        need_update = (
+            (loc.latitude is None or loc.longitude is None) or
+            abs(loc.latitude - lat) > 1e-9 or
+            abs(loc.longitude - lng) > 1e-9
+        )
+        if not created and need_update:
+            loc.latitude = lat
+            loc.longitude = lng
+            if not (loc.region or '').strip() and region:     loc.region   = region
+            if not (loc.city or '').strip() and city:         loc.city     = city
+            if not (loc.district or '').strip() and district: loc.district = district
+            loc.save(update_fields=['latitude', 'longitude', 'region', 'city', 'district'])
         return loc
 
     def create(self, validated_data):
-        # ⚠️ 프론트는 write 필드를 model 필드명과 다르게 보냄 → initial_data에서 직접 꺼냄
-        raw = self.initial_data or {}
-        try:
-            address = (raw.get('location') or '').strip()
-            name = (raw.get('type') or address or '장소').strip()
-            lat = float(raw.get('lat'))
-            lng = float(raw.get('lng'))
-        except (TypeError, ValueError):
-            raise serializers.ValidationError({'lat_lng': 'lat/lng는 숫자여야 합니다.'})
+        loc = self._resolve_location(validated_data)
 
-        if address == '':
-            # address(문자열)가 굳이 필수는 아니지만, 있으면 좋음
-            # 필수로 강제하고 싶으면 ValidationError로 막아도 OK
-            pass
+        # name 우선순위: name > type > 주소 > '장소'
+        name_in = (validated_data.get('name') or '').strip()
+        type_in = (validated_data.get('type') or '').strip()
+        addr_in = (validated_data.get('__resolved_address__') or '').strip()
+        final_name = name_in or type_in or addr_in or '장소'
 
-        client_id = raw.get('client_id') or None
-        user = self.context['request'].user
+        lat = validated_data.get('latitude')
+        lng = validated_data.get('longitude')
 
-        # ✅ latitude/longitude 필수로 Location 생성/획득 (NOT NULL 회피)
-        loc = self._get_or_create_location(address=address, lat=lat, lng=lng)
+        # write-only/임시 키 정리
+        for k in ('location', 'address', 'region', 'city', 'district', 'type', '__resolved_address__'):
+            validated_data.pop(k, None)
 
-        place = SavedPlace.objects.create(
-            user=user,
-            name=name,
+        instance = SavedPlace.objects.create(
             location=loc,
-            latitude=lat,
-            longitude=lng,
-            client_id=client_id
+            name=final_name,
+            latitude=lat,          # 모델에 필드가 있으므로 저장
+            longitude=lng,         # (원치 않으시면 이 두 줄 제거)
+            **validated_data
         )
-        return place
+        return instance
+
+    # 생성 응답은 읽기 포맷으로 통일
+    def to_representation(self, instance):
+        return SavedPlaceReadSerializer(instance, context=self.context).data    
     
 class ReportSerializer(serializers.ModelSerializer):
     report_id   = serializers.IntegerField(source='id', read_only=True)
@@ -242,12 +339,12 @@ class ReportSerializer(serializers.ModelSerializer):
 class NotificationSerializer(serializers.ModelSerializer):
     notification_id = serializers.IntegerField(source='id', read_only=True)
 
-    # ▶ read-only id 필드들 (source 지정하지 마세요: DRF가 알아서 obj.user_id/…를 읽습니다)
+    # read-only FK id들: source 지정하지 않습니다 (DRF가 obj.user_id 등을 자동으로 읽음)
     user_id   = serializers.IntegerField(read_only=True)
     admin_id  = serializers.IntegerField(read_only=True)
     report_id = serializers.IntegerField(read_only=True)
 
-    # ▶ write-only 입력용 (개인 알림 생성 시 받기 위함)
+    # write-only 입력용(개인 알림 생성 시)
     user_id_in = serializers.PrimaryKeyRelatedField(
         source='user',
         queryset=User.objects.all(),
@@ -256,10 +353,12 @@ class NotificationSerializer(serializers.ModelSerializer):
         allow_null=True,
     )
 
-    # ▶ 표시용
+    # 화면에서 바로 쓰는 파생 필드들
     user_name    = serializers.SerializerMethodField()
     animal_name  = serializers.SerializerMethodField()
     status_label = serializers.SerializerMethodField()
+    title        = serializers.SerializerMethodField()   # "사용자 - 동물"
+    message      = serializers.SerializerMethodField()   # 본문 1줄(피드백 > reply)
 
     class Meta:
         model = Notification
@@ -268,24 +367,112 @@ class NotificationSerializer(serializers.ModelSerializer):
             'type', 'created_at',
             'reply', 'status_change', 'status_label',
             'user_id', 'admin_id', 'report_id', 'user_id_in',
-            'user_name', 'animal_name',
+            'user_name', 'animal_name', 'title', 'message',
         ]
-        read_only_fields = ['notification_id', 'created_at', 'user_id', 'admin_id', 'report_id']
+        read_only_fields = [
+            'notification_id', 'created_at',
+            'user_id', 'admin_id', 'report_id',
+            'user_name', 'animal_name', 'title', 'message', 'status_label',
+        ]
+
+    # ---------- 표기용 helpers ----------
+    def _pick_user(self, obj):
+        # 알림 user가 없으면 report.user 사용
+        u = getattr(obj, 'user', None)
+        if u is None:
+            rpt = getattr(obj, 'report', None)
+            if rpt is not None:
+                u = getattr(rpt, 'user', None)
+        return u
 
     def get_user_name(self, obj):
-        # 우선순위: 알림의 user → 리포트의 user
-        u = getattr(obj, 'user', None) or getattr(getattr(obj, 'report', None), 'user', None)
+        u = self._pick_user(obj)
         if not u:
             return '사용자'
-        return u.first_name or u.username or f'사용자 #{u.id}'
+        return (u.first_name or u.username or f'사용자 #{u.id}')
 
     def get_animal_name(self, obj):
-        a = getattr(getattr(obj, 'report', None), 'animal', None)
-        return getattr(a, 'name_kor', None) or '미상'
+        rpt = getattr(obj, 'report', None)
+        if rpt and getattr(rpt, 'animal', None):
+            return getattr(rpt.animal, 'name_kor', None) or '미상'
+        return '미상'
 
     def get_status_label(self, obj):
-        return dict(Notification.STATUS_CHANGE_CHOICES).get(obj.status_change)
+        try:
+            sc = getattr(obj, "status_change", None)
+            if sc:
+                sc_map = dict(Notification.STATUS_CHANGE_CHOICES)
+                if sc in sc_map:
+                    return sc_map[sc]
+        except Exception:
+            pass
 
+        try:
+            rep = getattr(obj, "report", None)
+            if rep and getattr(rep, "status", None):
+                rep_map = dict(Report.STATUS_CHOICES)
+                if rep.status in rep_map:
+                    return rep_map[rep.status]
+        except Exception:
+            pass
+        return None
+
+    def get_title(self, obj):
+        t = getattr(obj, 'type', None)
+
+        # ✅ 그룹 공지(전체 공지) 전용 타이틀
+        if t == 'group':
+            label = self.get_status_label(obj)
+            if label:
+                return f"전체 공지 · {label}"
+
+            rep = (obj.reply or '').strip()
+            if rep:
+                first_line = rep.splitlines()[0].strip()
+                # 30자 내 요약
+                if len(first_line) > 30:
+                    first_line = first_line[:29] + '…'
+                return f"전체 공지 · {first_line}"
+
+            return "전체 공지"
+
+        # ✅ 개인 알림은 기존 포맷 유지
+        return f"{self.get_user_name(obj)} - {self.get_animal_name(obj)}"
+
+    def _report_status_label(self, obj):
+        try:
+            rep = getattr(obj, "report", None)
+            if rep:
+                return dict(Report.STATUS_CHOICES).get(getattr(rep, "status", None))
+        except Exception:
+            pass
+        return None
+
+    def get_message(self, obj):
+        # t = getattr(obj, "type", None)
+
+        # # ✅ 그룹 공지: 본문(reply) 보여주기
+        # if t == "group":
+        #     txt = (obj.reply or "").strip()
+        #     if txt:
+        #         return txt
+        #     # 드물게 reply가 없고 status_change만 있는 경우 라벨로라도 표시
+        #     sl = self.get_status_label(obj)
+        #     return sl or "공지"
+
+        # # ✅ 개인 알림: 표의 동물/신고ID/상태와 '내용'을 100% 일치
+        # rid = getattr(obj, "report_id", None)
+        # animal = self.get_animal_name(obj) or "미상"
+        # status_label = self.get_status_label(obj) or self._report_status_label(obj) or "미상"
+
+        # parts = [f"동물: {animal}"]
+        # if rid:
+        #     parts.append(f"신고 ID: {rid}")
+        # parts.append(f"상태: {status_label}")
+        # return " / ".join(parts)
+        return (obj.reply or '').strip()
+
+    # ---------- 유효성 ----------
     def validate(self, attrs):
         t    = attrs.get('type') or getattr(self.instance, 'type', None)
         user = attrs.get('user', getattr(self.instance, 'user', None))

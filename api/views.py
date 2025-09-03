@@ -1,50 +1,53 @@
 import requests, ipaddress, socket
 from typing import Optional
+from urllib.parse import urlparse, urlencode
+from datetime import datetime
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db.models import Case, When, Value, CharField, F, Q, Count
 from django.db import IntegrityError, transaction
+from django.db.models import (
+    Case, When, Value, CharField, F, Q, Count, OuterRef, Subquery, DateTimeField
+)
 from django.http import StreamingHttpResponse, JsonResponse, HttpResponse, HttpResponseBadRequest
-from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import mixins, viewsets, status, permissions
 from django.views.decorators.http import require_GET
 from django.views.decorators.cache import cache_page
-from urllib.parse import urlparse, urlencode
-from rest_framework.authentication import SessionAuthentication
-from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser, IsAuthenticatedOrReadOnly
+
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import mixins, viewsets, status, permissions
+from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.request import Request
 from rest_framework.views import APIView
-from .utils import is_admin
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.authentication import JWTAuthentication
-from .models import ( User, Animal, SearchHistory, Location, Report, Notification, Feedback, Admin, Statistic, SavedPlace, Profile )
+
+from .utils import is_admin
+from .models import (
+    User, Animal, SearchHistory, Location, Report, Notification,
+    Feedback, Admin, Statistic, SavedPlace, Profile
+)
 from .serializers import (
     UserSerializer, UserSignUpSerializer,
     AnimalSerializer, SearchHistorySerializer,
     LocationSerializer, ReportSerializer,
     NotificationSerializer, FeedbackSerializer,
-    StatisticSerializer, SavedPlaceSerializer, 
-    AdminSerializer, ProfileSerializer, 
+    StatisticSerializer, SavedPlaceCreateSerializer, SavedPlaceReadSerializer,
+    AdminSerializer, ProfileSerializer,
     UserProfileSerializer
 )
-from datetime import datetime
 from .filters import ReportFilter, NotificationFilter
+
 
 User = get_user_model()
 
-def is_admin(user) -> bool:
-    return bool(
-        user and user.is_authenticated and (
-            user.is_staff or user.is_superuser or hasattr(user, 'admin')
-        )
-    )
-
-
+# ------------------------------------------------------------
+# Permissions
+# ------------------------------------------------------------
 class IsAdminOrReadGroup(permissions.BasePermission):
     """
     SAFE_METHODS:
@@ -58,105 +61,21 @@ class IsAdminOrReadGroup(permissions.BasePermission):
         if request.method in permissions.SAFE_METHODS:
             qtype = (request.query_params.get('type') or '').lower().strip()
             if qtype == 'group':
-                return True  # 익명도 그룹 목록 열람 가능
-            # 그 외 조회는 로그인 필요
+                return True
             return bool(request.user and request.user.is_authenticated)
-        # 쓰기 권한은 관리자만
         return bool(request.user and request.user.is_authenticated and is_admin(request.user))
 
     def has_object_permission(self, request, view, obj):
         if request.method in permissions.SAFE_METHODS:
             if getattr(obj, 'type', None) == 'group':
                 return True
-            # 개인 알림은 관리자 또는 본인만
             if request.user and request.user.is_authenticated:
                 return is_admin(request.user) or (getattr(obj, 'user_id', None) == request.user.id)
             return False
-        # 쓰기는 관리자만
         return bool(request.user and request.user.is_authenticated and is_admin(request.user))
 
 
-class SearchHistoryViewSet(
-    mixins.ListModelMixin,
-    mixins.CreateModelMixin,
-    mixins.DestroyModelMixin,
-    viewsets.GenericViewSet
-):
-    """
-    GET    /search-history/        → 로그인 유저 자신의 검색 기록 조회
-    POST   /search-history/        → 로그인 유저 자신의 검색 기록 생성
-    DELETE /search-history/{pk}/   → 해당 기록 삭제
-    """
-    queryset = SearchHistory.objects.all()
-    serializer_class = SearchHistorySerializer
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        return self.queryset.filter(user=self.request.user).order_by('-id')
-
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
-
-def animal_stats(request):
-    # 1) 전체 집계 (동물명 없으면 '미상')
-    rows = (
-        Report.objects.values('animal__name_kor')
-        .annotate(count=Count('id'))
-        .order_by('-count')
-    )
-    full = [
-        {'animal': (r['animal__name_kor'] or '미상'), 'count': r['count']}
-        for r in rows
-    ]
-    # 내림차순 정렬
-    full.sort(key=lambda x: x['count'], reverse=True)
-
-    # 2) '기타'가 DB에 이미 있다면 분리
-    etc_from_db = next((x for x in full if x['animal'] == '기타'), None)
-    non_etc = [x for x in full if x['animal'] != '기타']
-
-    # 3) Top4 + 나머지 합산 → '기타'는 항상 마지막
-    top4 = non_etc[:4]
-    rest = non_etc[4:]
-    etc_sum = (etc_from_db['count'] if etc_from_db else 0) + sum(x['count'] for x in rest)
-
-    data = top4 + ([{'animal': '기타', 'count': etc_sum}] if etc_sum > 0 else [])
-
-    # 4) 기타 상세(Top4에서 제외된 원본 목록)
-    others_detail = sorted(rest, key=lambda x: x['count'], reverse=True)
-
-    return JsonResponse({'data': data, 'others_detail': others_detail})
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def animal_stats_raw(request):
-    rows = (
-        Report.objects.values('animal__name_kor')
-        .annotate(count=Count('id'))
-        .order_by('-count')
-    )
-    data = [{'animal': r['animal__name_kor'] or '미상', 'count': r['count']} for r in rows]
-    return Response(data)
-
-# 지역별 + 동물별 신고 건수
-def region_by_animal_stats(request):
-    stats = (
-        Report.objects.values("location__city", "animal__name_kor")
-        .annotate(count=Count("id"))
-        .order_by("location__city")
-    )
-    result = [
-        {
-            "city": s["location__city"],
-            "animal": s["animal__name_kor"],
-            "count": s["count"],
-        }
-        for s in stats
-    ]
-    return JsonResponse(result, safe=False)
-
-
+# 선택적으로 사용: /notifications/?type=group 익명 허용 예시
 class IsAuthenticatedOrReadGroup(permissions.BasePermission):
     """
     - /notifications/?type=group → 로그인 안 해도 읽기 허용 (원하면 막아도 됨)
@@ -166,9 +85,12 @@ class IsAuthenticatedOrReadGroup(permissions.BasePermission):
         qtype = request.query_params.get("type", "").lower()
         if qtype == "group" and request.method in permissions.SAFE_METHODS:
             return True
-        return request.user and request.user.is_authenticated
-    
+        return bool(request.user and request.user.is_authenticated)
 
+
+# ------------------------------------------------------------
+# Utilities for Notification
+# ------------------------------------------------------------
 def _resolve_admin_from_request_or_feedback(request, fb) -> Optional[Admin]:
     """
     알림의 admin 컬럼 채우기:
@@ -186,12 +108,14 @@ def _resolve_admin_from_request_or_feedback(request, fb) -> Optional[Admin]:
     return getattr(request.user, "admin", None) if is_admin(request.user) else None
 
 
-def _upsert_notification_for_report(*, report: Report, reply: Optional[str], status_change: Optional[str], admin_obj: Optional[Admin]) -> Notification:
+def _upsert_notification_for_report(
+    *, report: Report, reply: Optional[str], status_change: Optional[str], admin_obj: Optional[Admin]
+) -> Notification:
     """
     보고서 하나당 개인 알림 1건 유지(업서트).
     - 있으면 update(필드 채워지면 덮어쓰기)
     - 없으면 create
-    - Notification에 report FK가 없을 수도 있으므로 감지해서 분기
+    - Notification에 report FK 유무 감지
     """
     has_report_fk = any(f.name == "report" for f in Notification._meta.get_fields())
 
@@ -210,7 +134,6 @@ def _upsert_notification_for_report(*, report: Report, reply: Optional[str], sta
             if admin_obj is not None and (getattr(obj, 'admin_id', None) or None) != getattr(admin_obj, 'id', None):
                 obj.admin = admin_obj; changed = True
             if changed:
-                # 필요한 필드만 저장
                 save_fields = []
                 if reply is not None:         save_fields.append('reply')
                 if status_change is not None: save_fields.append('status_change')
@@ -218,7 +141,6 @@ def _upsert_notification_for_report(*, report: Report, reply: Optional[str], sta
                 obj.save(update_fields=save_fields)
             return obj
 
-        # 없으면 생성
         payload = dict(
             type='individual',
             user_id=report.user_id,
@@ -229,9 +151,11 @@ def _upsert_notification_for_report(*, report: Report, reply: Optional[str], sta
         if has_report_fk:
             payload['report_id'] = report.id
         return Notification.objects.create(**payload)
-############################################################3
 
 
+# ------------------------------------------------------------
+# Auth
+# ------------------------------------------------------------
 class SignUpView(APIView):
     permission_classes = [AllowAny]
 
@@ -280,6 +204,7 @@ class LoginView(APIView):
             'user_id': user.id,
         }, status=status.HTTP_200_OK)
 
+
 class UserViewSet(viewsets.ReadOnlyModelViewSet):
     """
     관리자 전용: 전체 사용자 조회/상세
@@ -288,6 +213,10 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = UserSerializer
     permission_classes = [IsAdminUser]
 
+
+# ------------------------------------------------------------
+# Image Proxy (SSRF 보호)
+# ------------------------------------------------------------
 ALLOWED_SCHEMES = {"http", "https"}
 ALLOWED_HOSTS_FOR_PROXY = {
     'i.namu.wiki',
@@ -313,6 +242,7 @@ def _is_private_host(hostname: str) -> bool:
         # DNS 실패 등은 안전하게 막음
         return True
 
+
 @require_GET
 @cache_page(60 * 60)  # 1 hour
 def proxy_image_view(request):
@@ -320,7 +250,6 @@ def proxy_image_view(request):
     if not url:
         return HttpResponseBadRequest("missing url")
 
-    # 1) URL 파싱/검증 (+SSRF 차단)
     try:
         p = urlparse(url)
         if p.scheme not in ALLOWED_SCHEMES or not p.hostname:
@@ -330,7 +259,6 @@ def proxy_image_view(request):
     except Exception:
         return HttpResponseBadRequest("bad url")
 
-    # 2) 업스트림 요청 헤더 보강 (일부 CDN 핫링크 보호 완화: 추측입니다)
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -340,17 +268,14 @@ def proxy_image_view(request):
         "Referer": f"{p.scheme}://{p.hostname}/",
     }
 
-    # 3) 업스트림 요청 (스트리밍)
     try:
         r = requests.get(url, headers=headers, stream=True, timeout=REQUEST_TIMEOUT)
     except Exception:
         return HttpResponseBadRequest("upstream fetch error")
 
-    # 4) 업스트림이 4xx/5xx면 그대로 전달(디버깅 쉬움)
     if not r.ok:
         return HttpResponse(f"upstream status {r.status_code}", status=r.status_code)
 
-    # 5) Content-Type/Length 전달 + 캐시
     content_type = r.headers.get("Content-Type", "application/octet-stream")
     resp = StreamingHttpResponse(r.iter_content(chunk_size=8192), content_type=content_type)
     cl = r.headers.get("Content-Length")
@@ -358,6 +283,87 @@ def proxy_image_view(request):
         resp["Content-Length"] = cl
     resp["Cache-Control"] = "public, max-age=86400"
     return resp
+
+
+# ------------------------------------------------------------
+# Domain APIs
+# ------------------------------------------------------------
+class SearchHistoryViewSet(
+    mixins.ListModelMixin,
+    mixins.CreateModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet
+):
+    """
+    GET    /search-history/        → 로그인 유저 자신의 검색 기록 조회
+    POST   /search-history/        → 로그인 유저 자신의 검색 기록 생성
+    DELETE /search-history/{pk}/   → 해당 기록 삭제
+    """
+    queryset = SearchHistory.objects.all()
+    serializer_class = SearchHistorySerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return self.queryset.filter(user=self.request.user).order_by('-id')
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+
+def animal_stats(request):
+    rows = (
+        Report.objects.values('animal__name_kor')
+        .annotate(count=Count('id'))
+        .order_by('-count')
+    )
+    full = [
+        {'animal': (r['animal__name_kor'] or '미상'), 'count': r['count']}
+        for r in rows
+    ]
+    full.sort(key=lambda x: x['count'], reverse=True)
+
+    etc_from_db = next((x for x in full if x['animal'] == '기타'), None)
+    non_etc = [x for x in full if x['animal'] != '기타']
+
+    top4 = non_etc[:4]
+    rest = non_etc[4:]
+    etc_sum = (etc_from_db['count'] if etc_from_db else 0) + sum(x['count'] for x in rest)
+
+    data = top4 + ([{'animal': '기타', 'count': etc_sum}] if etc_sum > 0 else [])
+    others_detail = sorted(rest, key=lambda x: x['count'], reverse=True)
+
+    return JsonResponse({'data': data, 'others_detail': others_detail})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def animal_stats_raw(request):
+    rows = (
+        Report.objects.values('animal__name_kor')
+        .annotate(count=Count('id'))
+        .order_by('-count')
+    )
+    data = [{'animal': r['animal__name_kor'] or '미상', 'count': r['count']} for r in rows]
+    return Response(data)
+
+
+def region_by_animal_stats(request):
+    stats = (
+        Report.objects.values("location__city", "animal__name_kor")
+        .annotate(count=Count("id"))
+        .order_by("location__city")
+    )
+    result = [
+        {
+            "city": s["location__city"],
+            "animal": s["animal__name_kor"],
+            "count": s["count"],
+        }
+        for s in stats
+    ]
+    return JsonResponse(result, safe=False)
+
 
 class AnimalViewSet(viewsets.ReadOnlyModelViewSet):
     """
@@ -376,77 +382,41 @@ class AnimalViewSet(viewsets.ReadOnlyModelViewSet):
         serializer = self.get_serializer(qs, many=True)
         return Response(serializer.data)
 
+
 class LocationViewSet(viewsets.ReadOnlyModelViewSet):
     """
     위치 목록/상세 조회
     """
     queryset = (
         Location.objects
-        .prefetch_related('reports', 'reports__user')  # Report에서 Location FK 참조
+        .prefetch_related('reports', 'reports__user')
         .all()
     )
     serializer_class = LocationSerializer
     permission_classes = [AllowAny]
 
     filter_backends = [DjangoFilterBackend, OrderingFilter, SearchFilter]
-    filterset_fields = [
-        'reports__id',          # 이 Location을 참조하는 Report id
-        'reports__user_id',     # Report를 통해 사용자 필터
-        'city',
-        'district',
-        'region'
-    ]
+    filterset_fields = ['reports__id', 'reports__user_id', 'city', 'district', 'region']
     search_fields = ['region', 'address', 'city', 'district']
     ordering_fields = ['id', 'latitude', 'longitude']
     ordering = ['-id']
 
+
 class SavedPlaceViewSet(viewsets.ModelViewSet):
-    serializer_class = SavedPlaceSerializer
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        user = self.request.user
-        if user.is_superuser:
-            return SavedPlace.objects.select_related('location').all()
-        return SavedPlace.objects.select_related('location').filter(user=user)
+        u = self.request.user
+        base = SavedPlace.objects.select_related('location')
+        return base if u.is_superuser else base.filter(user=u)
+
+    def get_serializer_class(self):
+        # 생성 때만 CreateSerializer, 나머지는 ReadSerializer
+        return SavedPlaceCreateSerializer if self.action == 'create' else SavedPlaceReadSerializer
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
-
-    # ✅ 프론트에서 'location'을 문자열로 보내도 수용 (Location 자동 생성)
-    def create(self, request, *args, **kwargs):
-        data = request.data.copy()
-
-        # 1) location 처리: 숫자면 PK로 사용, 아니면 address로 Location 생성/재사용
-        loc_raw = (data.get('location') or '').strip()
-        loc_id = None
-        if loc_raw.isdigit():
-            loc_id = int(loc_raw)
-        else:
-            if loc_raw:
-                loc, _ = Location.objects.get_or_create(
-                    address=loc_raw,
-                    defaults={'city': None, 'district': None, 'region': None,
-                              'latitude': None, 'longitude': None}
-                )
-                loc_id = loc.id
-
-        if loc_id:
-            data['location'] = loc_id
-        else:
-            # location을 못 만들면 400
-            return Response({'location': '유효한 주소(문자열)나 Location PK가 필요합니다.'},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        # 2) 불필요/미정의 필드 정리 (type/client_id 등은 모델에 없을 수 있음)
-        cleaned = {'name': data.get('name'), 'location': data['location']}
-
-        ser = self.get_serializer(data=cleaned)
-        ser.is_valid(raise_exception=True)
-        self.perform_create(ser)
-        headers = self.get_success_headers(ser.data)
-        return Response(ser.data, status=status.HTTP_201_CREATED, headers=headers)
 
 
 class ReportViewSet(mixins.ListModelMixin,
@@ -475,11 +445,9 @@ class ReportViewSet(mixins.ListModelMixin,
         qs = Report.objects.select_related('animal', 'user', 'location')
         if user.is_superuser:
             return qs
-        return qs.filter(user=user)   # 일반 사용자 → 본인 신고만
+        return qs.filter(user=user)
 
-    # 신고 생성 시 user 자동 연결
     def perform_create(self, serializer):
-        # ← 중복 정의 하나만 남깁니다.
         serializer.save(user=self.request.user)
 
     def perform_update(self, serializer):
@@ -493,12 +461,11 @@ class ReportViewSet(mixins.ListModelMixin,
             report: Report = serializer.save()
             new_status = report.status
 
-            # 상태 변화가 있을 때만 알림 내용 채움 (원하면 트리거 조건 수정)
             if old_status != new_status:
                 admin_obj = getattr(self.request.user, "admin", None) if is_admin(self.request.user) else None
                 _upsert_notification_for_report(
                     report=report,
-                    reply=None,  # 상태 변경은 텍스트 답변 없이
+                    reply=None,
                     status_change=f"{old_status}->{new_status}",
                     admin_obj=admin_obj,
                 )
@@ -513,14 +480,18 @@ class ReportViewSet(mixins.ListModelMixin,
             try:
                 start = datetime.strptime(from_date, "%Y-%m-%d").date()
                 end   = datetime.strptime(to_date,   "%Y-%m-%d").date()
-
-                # report_date 필드 타입에 맞게 선택:
-                #  - DateField면 __gte / __lte
-                #  - DateTimeField면 __date__gte / __date__lte
-                queryset = queryset.filter(
-                    report_date__date__gte=start,
-                    report_date__date__lte=end
-                )
+                # report_date 필드 타입에 맞게 자동 선택
+                field = Report._meta.get_field('report_date')
+                if isinstance(field, DateTimeField):
+                    queryset = queryset.filter(
+                        report_date__date__gte=start,
+                        report_date__date__lte=end
+                    )
+                else:
+                    queryset = queryset.filter(
+                        report_date__gte=start,
+                        report_date__lte=end
+                    )
             except ValueError:
                 pass
 
@@ -562,10 +533,10 @@ class ReportViewSet(mixins.ListModelMixin,
             'total': total,
             'by_status': by_status,
             'by_animal': by_animal,
-            'by_region': by_region,   # ← 이제 '강서구', '해운대구' 등으로 나옵니다
+            'by_region': by_region,
         }
         return Response(data)
-    
+
     # ===== 동물별 신고 건수 (도넛) =====
     @action(detail=False, methods=['get'], url_path='stats/animal')
     def stats_animal(self, request):
@@ -648,6 +619,7 @@ class ReportViewSet(mixins.ListModelMixin,
 
         return Response(data)
 
+
 class NotificationViewSet(mixins.ListModelMixin,
                           mixins.CreateModelMixin,
                           mixins.RetrieveModelMixin,
@@ -670,40 +642,44 @@ class NotificationViewSet(mixins.ListModelMixin,
     ordering = ['-created_at', '-id']
 
     def get_queryset(self):
-        qs = super().get_queryset()
-        u = self.request.user
-        qtype = (self.request.query_params.get('type') or '').lower().strip()
+        qs = (Notification.objects
+              .select_related('user', 'admin', 'report', 'report__animal', 'report__user'))
 
-        if not u.is_authenticated:
-            qs = qs.filter(type='group')
-        else:
-            if not is_admin(u):
-                # 일반 사용자: 그룹 + (내가 신고자 or 내가 담당자인 개인 알림)
-                qs = qs.filter(
-                    Q(type='group') |
-                    Q(type='individual', user_id=u.id) |
-                    Q(type='individual', admin__user_id=u.id)
-                )
-            else:
-                # 관리자: 전체, 단 scope=mine 이면 자기 중심으로
-                scope = (self.request.query_params.get('scope') or '').lower()
-                if scope in ('mine','me','my'):
-                    qs = qs.filter(
-                        Q(type='group') |
-                        Q(type='individual', user_id=u.id) |
-                        Q(type='individual', admin__user_id=u.id)
-                    )
+        qtype = (self.request.query_params.get('type') or '').strip().lower()
+        user  = self.request.user
 
-        if qtype in ('group', 'individual'):
-            qs = qs.filter(type=qtype)
+        # ① 그룹 공지: 언제나 group만
+        if qtype == 'group':
+            return qs.filter(type='group').order_by('-created_at', '-id')
 
-        return qs.order_by('-created_at', '-id')
+        # ② 개인 알림: 인증 필수 + individual만
+        if qtype == 'individual':
+            if not (user and user.is_authenticated):
+                return qs.none()
+            if is_admin(user):
+                scope = (self.request.query_params.get('scope') or '').strip().lower()
+                base = qs.filter(type='individual')
+                if scope in ('mine', 'me', 'my'):
+                    base = base.filter(Q(user_id=user.id) | Q(admin__user_id=user.id))
+                return base.order_by('-created_at', '-id')
+            return qs.filter(type='individual', user_id=user.id).order_by('-created_at', '-id')
+
+        # ③ type 누락 시 섞임 방지 → 빈 결과
+        return qs.none()
+
+    def list(self, request, *args, **kwargs):
+        qtype = (request.query_params.get('type') or '').strip().lower()
+        if qtype not in ('group', 'individual'):
+            return Response(
+                {'detail': "type=group 또는 type=individual 파라미터가 필요합니다."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        return super().list(request, *args, **kwargs)
 
     def perform_create(self, serializer):
         if not is_admin(self.request.user):
             raise PermissionDenied("관리자만 생성할 수 있습니다.")
 
-        # 개인 알림의 수신자가 '관리자 계정(= Admin.user)'이면 금지
         t = serializer.validated_data.get('type')
         target_user = serializer.validated_data.get('user')
         if t == 'individual' and target_user and getattr(target_user, 'admin', None):
@@ -757,10 +733,9 @@ class NotificationViewSet(mixins.ListModelMixin,
             )
             return Response({'created': 1}, status=status.HTTP_201_CREATED)
 
-        # 특정 사용자 대상이면 개인 알림로 저장
         from django.contrib.auth import get_user_model
-        User = get_user_model()
-        users = User.objects.filter(id__in=user_ids, admin__isnull=True)  # 관리자 계정은 제외
+        UserModel = get_user_model()
+        users = UserModel.objects.filter(id__in=user_ids, admin__isnull=True)  # 관리자 계정 제외
         to_create = [
             Notification(
                 type='individual', user=u,
@@ -781,8 +756,7 @@ class FeedbackViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     filter_backends = [DjangoFilterBackend, OrderingFilter]
-    # FK 표준 필터 (?report=, ?user=, ?admin= 로 PK 필터)
-    filterset_fields = ['report', 'user', 'admin']
+    filterset_fields = ['report', 'user', 'admin']  # FK 표준 필터
     ordering_fields = ['feedback_datetime', 'feedback_id']
     ordering = ['-feedback_datetime']
 
@@ -790,21 +764,20 @@ class FeedbackViewSet(viewsets.ModelViewSet):
         qs = super().get_queryset()
         u = self.request.user
 
-        # ✅ 일반 사용자는 "내 알림" = 내가 신고자(user) 이거나 내가 담당자(admin)인 것 모두
+        # 일반 사용자: 내가 신고자(user)인 것만
         if not is_admin(u):
-            qs = qs.filter(Q(user_id=u.id) | Q(admin_id=u.id))
+            qs = qs.filter(user_id=u.id)
         else:
-            # 관리자 계정은 전체 보되, 선택적으로 좁힐 수 있게 쿼리 파라미터 지원
+            # 관리자: 전체. ?scope=mine → 내가 reporter이거나 내가 속한 admin이 담당인 것
             scope = (self.request.query_params.get('scope') or '').lower()
             if scope in ('mine', 'me', 'my'):
-                qs = qs.filter(Q(user_id=u.id) | Q(admin_id=u.id))
+                qs = qs.filter(Q(user_id=u.id) | Q(admin__user_id=u.id))
 
-        # 선택 필터 (?role=reporter|admin) — 필요할 때만
         role = (self.request.query_params.get('role') or '').lower()
         if role == 'reporter':
             qs = qs.filter(user_id=u.id)
         elif role == 'admin':
-            qs = qs.filter(admin_id=u.id)
+            qs = qs.filter(admin__user_id=u.id)
 
         return qs.order_by('-feedback_datetime', '-feedback_id')
 
@@ -816,15 +789,18 @@ class FeedbackViewSet(viewsets.ModelViewSet):
 
             _upsert_notification_for_report(
                 report=rpt,
-                reply=(fb.content or ""),
+                # reply=(fb.content or ""),
+                reply=None, 
                 status_change=None,
                 admin_obj=admin_obj,
             )
-        
+
+
 def my_notifications_qs(request):
     return (Feedback.objects
-            .filter(Q(user_id=request.user.id) | Q(admin_id=request.user.id))
+            .filter(Q(user_id=request.user.id) | Q(admin__user_id=request.user.id))
             .order_by('-feedback_datetime', '-feedback_id'))
+
 
 class StatisticViewSet(viewsets.ReadOnlyModelViewSet):
     """
@@ -833,6 +809,7 @@ class StatisticViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Statistic.objects.all().order_by('-state_year', '-state_month')
     serializer_class = StatisticSerializer
     permission_classes = [IsAuthenticated]
+
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
@@ -854,25 +831,25 @@ def animal_info(request):
     else:
         features = []
 
-    # 프록시 이미지 URL 구성 (루트 urls.py에 /api/image-proxy/가 등록되어 있어야 함)
+    # 프록시 이미지 URL 구성
     proxied = None
     if getattr(a, "image_url", None):
         q = urlencode({'url': a.image_url})
         proxied = request.build_absolute_uri(f"/api/image-proxy/?{q}")
 
-    # ★ 프론트 호환: 모든 변형 키를 함께 내려줌 + 프록시
     return Response({
         "name":        a.name_kor,
         "english":     getattr(a, "name_eng", None),
-        "image_url":   getattr(a, "image_url", None),  # snake
-        "image":       getattr(a, "image_url", None),  # alias
-        "imageUrl":    getattr(a, "image_url", None),  # alias
-        "proxied_image_url": proxied,                  # 프록시
+        "image_url":   getattr(a, "image_url", None),
+        "image":       getattr(a, "image_url", None),
+        "imageUrl":    getattr(a, "image_url", None),
+        "proxied_image_url": proxied,
         "features":    features,
-        "precautions": getattr(a, "precautions", None),  # ★ 복수형
+        "precautions": getattr(a, "precautions", None),
         "description": getattr(a, "description", None),
     })
-    
+
+
 class AdminViewSet(mixins.ListModelMixin,
                    mixins.CreateModelMixin,
                    mixins.RetrieveModelMixin,
@@ -884,7 +861,7 @@ class AdminViewSet(mixins.ListModelMixin,
     """
     queryset = Admin.objects.all()
     serializer_class = AdminSerializer
-    permission_classes = [IsAdminUser]  # DRF 기본 관리자 권한
+    permission_classes = [IsAdminUser]
 
 
 class MeProfileView(APIView):
@@ -922,8 +899,9 @@ class ChangePasswordView(APIView):
         request.user.set_password(new_password)
         request.user.save(update_fields=['password'])
         return Response({'detail': '비밀번호가 변경되었습니다.'}, status=status.HTTP_200_OK)
-    
-@api_view(["GET", "PUT", "PATCH"])  # ← PUT 추가
+
+
+@api_view(["GET", "PUT", "PATCH"])
 @permission_classes([IsAuthenticated])
 def user_profile(request):
     user = request.user
@@ -931,7 +909,7 @@ def user_profile(request):
         return Response(UserProfileSerializer(user).data)
 
     print("[user_profile] incoming data:", dict(request.data))  # 디버깅용
-    ser = UserProfileSerializer(user, data=request.data, partial=True)  # 부분수정
+    ser = UserProfileSerializer(user, data=request.data, partial=True)
     ser.is_valid(raise_exception=True)
     ser.save()
     return Response(ser.data, status=status.HTTP_200_OK)
