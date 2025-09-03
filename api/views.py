@@ -789,8 +789,7 @@ class FeedbackViewSet(viewsets.ModelViewSet):
 
             _upsert_notification_for_report(
                 report=rpt,
-                # reply=(fb.content or ""),
-                reply=None, 
+                reply=(fb.content or ""),   # ← 피드백 내용을 바로 저장
                 status_change=None,
                 admin_obj=admin_obj,
             )
