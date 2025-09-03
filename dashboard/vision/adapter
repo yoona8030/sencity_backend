@@ -1,0 +1,192 @@
+# dashboard/vision/adapter.py
+
+from __future__ import annotations
+import os
+import threading
+import inspect
+from typing import Tuple, Any
+
+import numpy as np
+import cv2
+import importlib
+
+# external 패키지에서 가능한 모듈 후보들을 순서대로 시도합니다.
+_MODULE_CANDIDATES = [
+    "external.classification_model.model_import",
+    "external.classification_model.model_test",
+    "external.classification_model",
+]
+
+# --- 유틸: 심볼 찾기 ---------------------------------------------------------
+def _import_module(name: str):
+    try:
+        return __import__(name, fromlist=["*"])
+    except Exception:
+        return None
+
+def _resolve_symbol(spec: str):
+    """
+    'module:attr' 또는 'module.attr' 모두 지원
+    """
+    if not spec:
+        return None
+    mod_name, attr = None, None
+    if ':' in spec:
+        mod_name, attr = spec.split(':', 1)
+    else:
+        parts = spec.split('.')
+        if len(parts) < 2:
+            return None
+        mod_name, attr = '.'.join(parts[:-1]), parts[-1]
+    try:
+        mod = importlib.import_module(mod_name)
+        return getattr(mod, attr, None)
+    except Exception:
+        return None
+def _accepts_arg(fn) -> bool:
+    """함수가 인자(최소 1개)를 받는지 확인"""
+    try:
+        sig = inspect.signature(fn)
+        return len(sig.parameters) >= 1
+    except Exception:
+        return False
+
+# --- 드라이런(초기 배선 확인용) 모드 ---------------------------------------
+_DRYRUN = os.getenv("CLASSIFIER_DRYRUN", "0") == "1"
+
+# --- 모델 로드/추론 함수 연결(TODO: 실제 함수명에 맞게 자동/수동 연결) -----
+_LOAD_FUNC_CANDIDATES = ("load_model", "get_model", "build_model", "init_model")
+_PRED_FUNC_CANDIDATES = ("predict", "infer", "run", "forward")
+
+def _load_model(weights_path: str | None = None):
+    """
+    모델 로더가 없을 수도 있으므로, 없으면 None을 반환.
+    - CLASSIFIER_LOAD_FN 지정 시에는 그 함수를 호출
+    - 없으면 candidates 시도
+    - 모두 실패해도 예외를 던지지 않고 None
+    """
+    if _DRYRUN:
+        return object()  # 더미
+
+    env_load = os.getenv("CLASSIFIER_LOAD_FN")
+    if env_load:
+        fn = _resolve_symbol(env_load)
+        if not fn:
+            raise NotImplementedError(f"지정한 로더({env_load})를 찾을 수 없습니다.")
+        return fn(weights_path) if _accepts_arg(fn) else fn()
+
+    # 자동 후보
+    for name in _LOAD_FUNC_CANDIDATES:
+        fn = _resolve_symbol(name)
+        if fn:
+            try:
+                return fn(weights_path) if _accepts_arg(fn) else fn()
+            except TypeError:
+                try:
+                    return fn()
+                except Exception:
+                    pass
+    # 로더가 없어도 OK
+    return None
+
+def _normalize_output(out: Any) -> Tuple[str, float]:
+    """
+    출력 정규화:
+    - (label, prob)
+    - {'label': str, 'prob': float}
+    - (index, prob) 형태도 label을 str로 캐스팅
+    """
+    if isinstance(out, dict):
+        return str(out.get("label", "unknown")), float(out.get("prob", 0.0))
+    if isinstance(out, (list, tuple)) and len(out) >= 2:
+        return str(out[0]), float(out[1])
+    # 그 외는 더미
+    return "unknown", 0.0
+
+def _predict_with_model(model: Any, frame_bgr: np.ndarray) -> Tuple[str, float]:
+    """
+    다양한 시그니처를 자동 대응:
+    - fn(model, img_bgr) / fn(model, img_rgb)
+    - fn(img_bgr) / fn(img_rgb)
+    - fn(path_to_image)
+    - fn()  (아주 드묾)
+    """
+    if _DRYRUN:
+        return "dryrun", 0.99
+
+    env_pred = os.getenv("CLASSIFIER_PRED_FN")
+    candidates = ([env_pred] if env_pred else []) + list(_PRED_FUNC_CANDIDATES)
+
+    # 임시 파일 경로 준비 (필요 시만 사용)
+    tmp_path = None
+    rgb = None
+
+    last_err = None
+    for name in candidates:
+        fn = _resolve_symbol(name)
+        if not fn:
+            continue
+        try:
+            # 1) (model, BGR)
+            return _normalize_output(fn(model, frame_bgr))
+        except Exception as e:
+            last_err = e
+        try:
+            # 2) (model, RGB)
+            if rgb is None:
+                rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+            return _normalize_output(fn(model, rgb))
+        except Exception as e:
+            last_err = e
+        try:
+            # 3) (BGR)
+            return _normalize_output(fn(frame_bgr))
+        except Exception as e:
+            last_err = e
+        try:
+            # 4) (RGB)
+            if rgb is None:
+                rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+            return _normalize_output(fn(rgb))
+        except Exception as e:
+            last_err = e
+        try:
+            # 5) (path) - 이미지 파일을 임시 저장 후 경로 전달
+            if tmp_path is None:
+                import tempfile
+                fd, tmp_path = tempfile.mkstemp(suffix=".jpg")
+                os.close(fd)
+                cv2.imwrite(tmp_path, frame_bgr)
+            return _normalize_output(fn(tmp_path))
+        except Exception as e:
+            last_err = e
+            continue
+
+    raise NotImplementedError(
+        f"추론 함수를 호출할 수 없습니다. 마지막 오류: {type(last_err).__name__}: {last_err}"
+    )
+
+# --- 싱글톤 분류기 ----------------------------------------------------------
+class SingletonClassifier:
+    """한 프로세스 내에서 모델을 1회만 로드하도록 보장"""
+    _lock = threading.Lock()
+    _inst: "SingletonClassifier|None" = None
+
+    def __new__(cls, *a, **kw):
+        with cls._lock:
+            if cls._inst is None:
+                cls._inst = super().__new__(cls)
+        return cls._inst
+
+    def __init__(self, weights_path: str | None = None):
+        if getattr(self, "_inited", False):
+            return
+        self._inited = True
+        # 가중치 경로: 인자 우선, 없으면 환경변수, 둘 다 없으면 None
+        wp = weights_path or os.getenv("CLASSIFIER_WEIGHTS")
+        self.model = _load_model(wp)
+        self._last = ("unknown", 0.0)
+
+    def predict_bgr(self, frame_bgr: np.ndarray) -> Tuple[str, float]:
+        self._last = _predict_with_model(self.model, frame_bgr)
+        return self._last
