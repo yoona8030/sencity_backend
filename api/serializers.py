@@ -1,4 +1,5 @@
 # api/serializers.py
+from decimal import Decimal
 from rest_framework import serializers
 from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
@@ -237,25 +238,37 @@ class SavedPlaceCreateSerializer(serializers.ModelSerializer):
         region   = (attrs.get('region')   or '').strip()
         city     = (attrs.get('city')     or '').strip()
         district = (attrs.get('district') or '').strip()
-        lat      = float(attrs.get('latitude'))
-        lng      = float(attrs.get('longitude'))
+
+        # ⬇️ 좌표를 Decimal로 정규화
+        lat_f = float(attrs.get('latitude'))
+        lng_f = float(attrs.get('longitude'))
+        lat_d = Decimal(str(lat_f))
+        lng_d = Decimal(str(lng_f))
 
         loc, created = Location.objects.get_or_create(
             address=address,
             defaults={
                 'region': region, 'city': city, 'district': district,
-                'latitude': lat,  'longitude': lng,
+                'latitude': lat_d, 'longitude': lng_d,
             }
         )
-        # 좌표/행정구역 보강
+
+        # ⬇️ 기존 레코드 보강/업데이트 필요 여부 판단 (비교는 float로 오차 허용)
+        def _to_float(v):
+            try:
+                return float(v) if v is not None else None
+            except Exception:
+                return None
+
         need_update = (
             (loc.latitude is None or loc.longitude is None) or
-            abs(loc.latitude - lat) > 1e-9 or
-            abs(loc.longitude - lng) > 1e-9
+            abs((_to_float(loc.latitude)  or 0.0) - lat_f) > 1e-7 or
+            abs((_to_float(loc.longitude) or 0.0) - lng_f) > 1e-7
         )
+
         if not created and need_update:
-            loc.latitude = lat
-            loc.longitude = lng
+            loc.latitude = lat_d
+            loc.longitude = lng_d
             if not (loc.region or '').strip() and region:     loc.region   = region
             if not (loc.city or '').strip() and city:         loc.city     = city
             if not (loc.district or '').strip() and district: loc.district = district
@@ -265,25 +278,31 @@ class SavedPlaceCreateSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         loc = self._resolve_location(validated_data)
 
-        # name 우선순위: name > type > 주소 > '장소'
         name_in = (validated_data.get('name') or '').strip()
         type_in = (validated_data.get('type') or '').strip()
         addr_in = (validated_data.get('__resolved_address__') or '').strip()
         final_name = name_in or type_in or addr_in or '장소'
 
-        lat = validated_data.get('latitude')
-        lng = validated_data.get('longitude')
+        # ⚠️ 중복 방지: 먼저 빼고
+        lat = validated_data.pop('latitude',  None)
+        lng = validated_data.pop('longitude', None)
+        _   = validated_data.pop('name', None)
 
-        # write-only/임시 키 정리
-        for k in ('location', 'address', 'region', 'city', 'district', 'type', '__resolved_address__'):
+        # 임시/쓰기 전용 키 정리
+        for k in ('location','address','region','city','district','type','__resolved_address__'):
             validated_data.pop(k, None)
+
+        # SavedPlace 모델이 DecimalField면 Decimal로, FloatField면 그대로 넣으세요.
+        # (둘 다 Decimal이면 아래 두 줄처럼)
+        lat_d = Decimal(str(lat)) if lat is not None else None
+        lng_d = Decimal(str(lng)) if lng is not None else None
 
         instance = SavedPlace.objects.create(
             location=loc,
             name=final_name,
-            latitude=lat,          # 모델에 필드가 있으므로 저장
-            longitude=lng,         # (원치 않으시면 이 두 줄 제거)
-            **validated_data
+            latitude=lat_d,   # FloatField면 lat로 바꾸세요
+            longitude=lng_d,  # FloatField면 lng로 바꾸세요
+            **validated_data,
         )
         return instance
 

@@ -1,0 +1,13 @@
+id,message_id,file,mime,size,created_at
+1,7,inquiries/2025/08/31/upload_freeze.jpg,image/jpeg,183421,2025-08-31T12:00:25Z
+2,12,inquiries/2025/08/28/lock_screen.png,image/png,94210,2025-08-28T23:50:25Z
+3,14,inquiries/2025/08/27/gps_offset.mp4,video/mp4,2034187,2025-08-27T14:12:45Z
+4,1,inquiries/2025/09/04/wrong_marker.jpg,image/jpeg,251993,2025-09-04T02:11:00Z
+5,18,inquiries/2025/09/04/crash_log.txt,text/plain,4120,2025-09-04T03:10:40Z
+6,20,inquiries/2025/09/04/photo_no_gps.jpg,image/jpeg,182341,2025-09-04T03:15:40Z
+7,22,inquiries/2025/09/04/reset_link.png,image/png,93210,2025-09-04T00:05:20Z
+8,26,inquiries/2025/09/03/download_fail.mp4,video/mp4,2401821,2025-09-03T14:01:00Z
+9,30,inquiries/2025/09/03/draft_question.jpg,image/jpeg,121004,2025-09-03T07:55:40Z
+10,34,inquiries/2025/09/02/network_lte.har,application/json,501284,2025-09-02T23:45:40Z
+11,36,inquiries/2025/09/02/share_button_tap.mov,video/quicktime,3184092,2025-09-02T19:30:50Z
+12,41,inquiries/2025/09/02/home_stats_empty.png,image/png,210348,2025-09-02T12:40:40Z

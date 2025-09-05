@@ -2,6 +2,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework.routers import SimpleRouter
 
 from . import views
 from .views import (
@@ -13,6 +14,7 @@ from .views import (
 )
 
 router = DefaultRouter()
+router = SimpleRouter()
 router.register(r'users',           UserViewSet,          basename='user')
 router.register(r'animals',         AnimalViewSet,        basename='animal')
 router.register(r'search-history',  SearchHistoryViewSet, basename='search-history')
@@ -50,4 +52,6 @@ urlpatterns = [
     # 프로필
     path('user/profile/',         MeProfileView.as_view()),
     path('user/change-password/', ChangePasswordView.as_view()),
+
+    path('', include('inquiries.urls')),
 ]

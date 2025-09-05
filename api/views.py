@@ -7,8 +7,9 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 from django.db.models import (
-    Case, When, Value, CharField, F, Q, Count, OuterRef, Subquery, DateTimeField
+    Case, When, Value, CharField, F, Q, Count, Max, OuterRef, Subquery, DateTimeField
 )
 from django.http import StreamingHttpResponse, JsonResponse, HttpResponse, HttpResponseBadRequest
 from django.views.decorators.http import require_GET
@@ -618,6 +619,80 @@ class ReportViewSet(mixins.ListModelMixin,
             data.append({"city": "기타", "animal": animal, "count": cnt})
 
         return Response(data)
+    
+    # 홈 카드용 요약
+    @action(detail=False, methods=['get'], url_path='summary')
+    def summary(self, request):
+        """
+        홈 카드용 요약
+        GET /api/reports/summary/?scope=global|me&period=all|7d|30d
+        응답:
+        {
+          "total_reports": 16,
+          "top_animal": {"id": 3, "name": "고라니", "count": 8} | null,
+          "last_report_date": "2025-08-05T06:08:00Z" | null
+        }
+        """
+        scope  = (request.query_params.get('scope') or 'global').lower()
+        period = (request.query_params.get('period') or 'all').lower()
+
+        # ① 기본 쿼리셋(전역 기준)
+        base = Report.objects.select_related('animal').all()
+
+        # ② 범위: me면 본인 것만(관리자라도 me면 본인 기준)
+        if scope == 'me':
+            base = base.filter(user=request.user)
+        else:
+            # scope != me인 경우:
+            # - 일반사용자도 전체(전역) 통계를 보게 하려면 그대로 두고
+            # - 만약 일반사용자는 전역을 못 보게 하려면 아래 주석 해제:
+            # if not request.user.is_superuser:
+            #     return Response({"detail": "권한이 없습니다."}, status=403)
+            pass
+
+        # ③ 기간 필터
+        now = timezone.now()
+        if period == '7d':
+            start = now - timezone.timedelta(days=7)
+        elif period == '30d':
+            start = now - timezone.timedelta(days=30)
+        else:
+            start = None
+
+        if start is not None:
+            # report_date 타입(날짜/일시)에 따라 자동 처리
+            field = Report._meta.get_field('report_date')
+            if isinstance(field, DateTimeField):
+                base = base.filter(report_date__gte=start)
+            else:
+                base = base.filter(report_date__gte=start.date())
+
+        # ④ 총 신고 수
+        total_reports = base.count()
+
+        # ⑤ 마지막 신고일
+        last_dt = base.aggregate(last=Max('report_date'))['last']
+
+        # ⑥ 가장 많이 신고된 동물
+        top_row = (
+            base.values('animal_id', 'animal__name_kor')
+                .annotate(cnt=Count('id'))
+                .order_by('-cnt')
+                .first()
+        )
+        top_animal = None
+        if top_row:
+            top_animal = {
+                "id":   top_row['animal_id'],
+                "name": top_row['animal__name_kor'] or '미상',
+                "count": top_row['cnt'],
+            }
+
+        return Response({
+            "total_reports": total_reports,
+            "top_animal": top_animal,
+            "last_report_date": last_dt.isoformat() if last_dt else None,
+        })
 
 
 class NotificationViewSet(mixins.ListModelMixin,
