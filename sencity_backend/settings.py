@@ -24,10 +24,12 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'django_filters',
     'rest_framework',
+    'rest_framework_simplejwt.token_blacklist',
     'corsheaders', 
     'api', 
     'inquiries',
-    'dashboard'
+    'dashboard', 
+    "django_extensions",
 ]
 
 SIMPLE_JWT = {
@@ -36,8 +38,8 @@ SIMPLE_JWT = {
 }
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware', 
     'django.middleware.security.SecurityMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',

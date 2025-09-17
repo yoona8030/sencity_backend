@@ -2,12 +2,16 @@ import requests, ipaddress, socket
 from typing import Optional
 from urllib.parse import urlparse, urlencode
 from datetime import datetime
+# 예: Pillow로 로드 → 모델 추론 → 최고 확률 레이블 매핑
+from PIL import Image
+from .ml import predict_topk, predict_topk_grouped  # 이전에 보여준 예시 유틸
 
 from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import IntegrityError, transaction
 from django.utils import timezone
+from django.conf import settings
 from django.db.models import (
     Case, When, Value, CharField, F, Q, Count, Max, OuterRef, Subquery, DateTimeField
 )
@@ -26,6 +30,7 @@ from rest_framework.views import APIView
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
 from .utils import is_admin
 from .models import (
@@ -694,7 +699,197 @@ class ReportViewSet(mixins.ListModelMixin,
             "last_report_date": last_dt.isoformat() if last_dt else None,
         })
 
+# ---------- Kakao 역지오 ----------
+class ReverseGeocodeView(APIView):
+    permission_classes = [AllowAny]
+    parser_classes = [JSONParser]
 
+    def post(self, request: Request):
+        lat = request.data.get('lat')
+        lng = request.data.get('lng')
+        if lat is None or lng is None:
+            return Response({'detail': 'lat,lng 필수'}, status=400)
+
+        try:
+            url = "https://dapi.kakao.com/v2/local/geo/coord2address.json"
+            r = requests.get(
+                url,
+                params={'x': lng, 'y': lat},
+                headers={'Authorization': f'KakaoAK {settings.KAKAO_REST_API_KEY}'},
+                timeout=8,
+            )
+            if not r.ok:
+                return Response({'detail': f'kakao {r.status_code}'}, status=502)
+            data = r.json()
+            addr = None
+            if data.get('documents'):
+                ad = data['documents'][0].get('address') or data['documents'][0].get('road_address')
+                if ad:
+                    addr = ad.get('address_name')
+            if not addr:
+                addr = f"{float(lat):.5f}, {float(lng):.5f}"
+            return Response({'address': addr})
+        except Exception as e:
+            return Response({'detail': str(e)}, status=502)
+
+
+# ---------- AI 인식(더미) ----------
+# --- api/views.py: RecognizeAnimalView 교체 ---
+class RecognizeAnimalView(APIView):
+    permission_classes = [AllowAny]
+    parser_classes = [MultiPartParser, FormParser]
+
+    # 모델 라벨(영문) -> DB의 name_eng 키 & 한국어 표기(옵션)
+    # ※ 고라니를 DB에서 'goat'로 쓰는 현 상태를 반영
+    _ALIAS_EN = {
+        # 철자 변형까지 흡수
+        "water deer": "goat",
+        "water-deer": "goat",
+        "water dear": "goat",   # 잘못된 라벨도 방어
+        "roe deer": "roe deer",
+
+        # 백로/왜가리 계열
+        "great egret": "egret",
+        "intermediate egret": "egret",
+        "little egret": "egret",
+        "egret": "egret",
+        "grey heron": "heron",
+        "gray heron": "heron",
+        "heron": "heron",
+
+        # 다람쥐/청설모 계열
+        "korean squirrel": "squirrel",
+        "eurasian red squirrel": "squirrel",
+        "squirrel": "squirrel",
+        "chipmunk": "chipmunk",
+
+        # 기타 예시(필요 시 계속 보강)
+        "wild boar": "wild boar",
+        "raccoon": "raccoon",
+        "black bear": "black bear",
+        "weasel": "weasel",
+        "dog": "dog",
+        "cat": "cat",
+    }
+
+    _ALIAS_KO = {
+        "goat": "고라니",
+        "roe deer": "노루",
+        "egret": "중대백로",
+        "heron": "왜가리",
+        "squirrel": "다람쥐",
+        "chipmunk": "청설모",
+        "wild boar": "멧돼지",
+        "weasel": "족제비",
+        "dog": "강아지",
+        "cat": "고양이",
+        "raccoon": "너구리",
+        "black bear": "반달가슴곰",
+    }
+
+    # 그룹 표기(한국어)
+    _GROUP_LABEL_KO = {
+        "deer": "고라니/노루",
+        "egret_heron": "중대백로/왜가리",
+        "sciuridae": "다람쥐/청설모",
+    }
+
+    @classmethod
+    def _norm_eng(cls, label_en: str) -> str:
+        """모델 라벨 영문을 DB의 name_eng 키로 정규화."""
+        k = (label_en or "").strip().lower()
+        return cls._ALIAS_EN.get(k, k)
+
+    @classmethod
+    def _to_kor(cls, db_key_en: str) -> str | None:
+        """DB 영문 키를 한국어 표기로(있으면) 변환."""
+        return cls._ALIAS_KO.get(db_key_en)
+
+    def _find_animal(self, rep_eng: str, display_ko: str | None):
+        """DB에서 대표 영문/한국어로 Animal 1건 조회."""
+        qs = Animal.objects.all()
+        q = Q(name_eng__iexact=rep_eng)
+        if display_ko:
+            q |= Q(name_kor__iexact=display_ko)
+        return qs.filter(q).order_by("id").first()
+
+    def post(self, request: Request):
+        f = request.FILES.get("photo") or request.FILES.get("image")
+        if not f:
+            return Response({"detail": "photo(또는 image) 파일이 필요합니다."}, status=400)
+
+        img = Image.open(f)
+        grouped = (request.query_params.get("grouped") in ("1", "true", "yes"))
+
+        # ============== 그룹 모드 ==============
+        if grouped:
+            topg = predict_topk_grouped(img, k=3)  # [{group,label_ko,prob,members:[(en,prob),...]}, ...]
+            results = []
+
+            for g in topg:
+                # 대표 멤버(그룹 내 1순위)
+                top_member_en = g["members"][0][0]
+                rep_eng = self._norm_eng(top_member_en)          # DB 키로 정규화
+                ko_from_key = self._to_kor(rep_eng)
+
+                # 화면 표기(그룹이면 고정 그룹명, 아니면 구성원 한글/영문)
+                if g.get("label_ko"):
+                    display = self._GROUP_LABEL_KO.get(g["group"], g["label_ko"])
+                else:
+                    display = ko_from_key or top_member_en  # 단일종이면 한글 있으면 한글, 없으면 영문
+
+                a = self._find_animal(rep_eng, display)
+
+                results.append({
+                    "group": g["group"],
+                    "label": display,          # 최종 화면 표기
+                    "prob": g["prob"],
+                    "members": g["members"],   # [(영문라벨, 확률), ...]
+                    "rep_eng": rep_eng,        # DB 조회에 사용한 표준 영문 키
+                    "animal_id": a.id if a else None,
+                })
+
+            return Response({"mode": "grouped", "results": results})
+
+        # ============== 단일 모드 ==============
+        topk = predict_topk(img, k=3)            # [{'label':en,'prob':...}, ...]
+        best = topk[0]
+        rep_eng = self._norm_eng(best["label"])  # DB 키 정규화
+        label_ko = self._to_kor(rep_eng)
+
+        a = self._find_animal(rep_eng, label_ko)
+
+        return Response({
+            "mode": "single",
+            "label": best["label"],          # 모델 원문 라벨(영문)
+            "label_norm": rep_eng,           # DB 정규화 키(영문)
+            "label_ko": label_ko,            # 한국어 표기(있으면)
+            "prob": best["prob"],
+            "animal_id": a.id if a else None,
+            "topk": topk,
+        })
+
+# ---------- 무인증 신고 ----------
+from .serializers import ReportNoAuthCreateSerializer
+
+class ReportNoAuthView(APIView):
+    """
+    multipart: photo, animalId, [locationId | lat,lng], status
+    """
+    permission_classes = [AllowAny]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def post(self, request: Request):
+        ser = ReportNoAuthCreateSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        rpt = ser.save()
+        return Response({
+            'report_id': rpt.id,
+            'status': rpt.status,
+            'animal': getattr(rpt.animal, 'name_kor', None),
+            'created_at': rpt.report_date,
+        }, status=201)
+    
 class NotificationViewSet(mixins.ListModelMixin,
                           mixins.CreateModelMixin,
                           mixins.RetrieveModelMixin,

@@ -37,9 +37,23 @@ class User(AbstractUser):
         verbose_name = 'Users'
         verbose_name_plural = 'Users'
 
+class AnimalGroup(models.Model):
+    slug = models.SlugField(max_length=50, unique=True, db_index=True)
+    name_kor = models.CharField(max_length=50)
+    name_eng = models.CharField(max_length=50, blank=True)
+
+# Animal 수정
 class Animal(models.Model):
+    code = models.SlugField(
+        max_length=50, db_index=True,
+        unique=True              # ← unique는 유지해도 null 여러개 허용됨(DB별로 ok)
+    )
     name_kor = models.CharField(max_length=50, unique=True)
-    name_eng = models.CharField(max_length=50)
+    name_eng = models.CharField(max_length=50)   # ← unique 주지 마세요(기존 데이터 충돌 방지)
+    aliases_eng = models.JSONField(default=list, blank=True)
+    group = models.ForeignKey('api.AnimalGroup', null=True, blank=True,
+                              on_delete=models.SET_NULL, related_name='animals')
+
     image_url = models.URLField(blank=True)
     description = models.TextField(blank=True)
     features = models.JSONField(default=list, blank=True)
@@ -47,11 +61,6 @@ class Animal(models.Model):
 
     def __str__(self):
         return self.name_kor
-
-    class Meta:
-        verbose_name = 'Animal'
-        verbose_name_plural = 'Animal'
-
 
 class SearchHistory(models.Model):
     user = models.ForeignKey(
@@ -85,7 +94,7 @@ class Location(models.Model):
             models.Index(fields=["latitude", "longitude"]),
         ]
     
-    constraints = [
+        constraints = [
             models.UniqueConstraint(
                 fields=['latitude', 'longitude', 'city', 'district', 'region', 'address'],
                 name='unique_location_lat_lon'
@@ -136,6 +145,8 @@ class Report(models.Model):
         on_delete=models.CASCADE,
         related_name='api_reports',
         db_index=True,
+        null=True,
+        blank=True  # 무인증 신고 가능
     )
     animal = models.ForeignKey(
         'api.Animal',

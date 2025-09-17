@@ -1,9 +1,6 @@
 # api/serializers.py
 from decimal import Decimal
 from rest_framework import serializers
-from rest_framework import viewsets
-from rest_framework.permissions import IsAuthenticated
-from rest_framework_simplejwt.authentication import JWTAuthentication
 from django.apps import apps
 from urllib.parse import urlencode
 from django.contrib.auth import get_user_model
@@ -147,6 +144,57 @@ class LocationLiteSerializer(serializers.ModelSerializer):
     class Meta:
         model = Location
         fields = ('id', 'address', 'city', 'district', 'region', 'latitude', 'longitude')
+
+class ReportNoAuthCreateSerializer(serializers.Serializer):
+    """
+    무인증 신고 생성 전용:
+      - multipart/form-data 로 전송
+      - 필수: animalId, photo
+      - 위치: locationId 주거나, 없으면 lat/lng 로 새 Location 생성
+      - status 기본값: 'checking'
+    """
+    animalId   = serializers.IntegerField()
+    locationId = serializers.IntegerField(required=False, allow_null=True)
+    status     = serializers.ChoiceField(
+        choices=[c[0] for c in Report.STATUS_CHOICES],
+        default='checking'
+    )
+    photo      = serializers.ImageField()
+
+    # 선택: 위경도 직접 받기 (locationId 없을 때)
+    lat = serializers.FloatField(required=False)
+    lng = serializers.FloatField(required=False)
+
+    def create(self, validated):
+        animal = Animal.objects.get(id=validated["animalId"])
+
+        # 1) 위치 결정
+        loc = None
+        loc_id = validated.get("locationId")
+        if loc_id:
+            try:
+                loc = Location.objects.get(id=loc_id)
+            except Location.DoesNotExist:
+                loc = None
+        else:
+            lat = validated.get("lat")
+            lng = validated.get("lng")
+            if lat is not None and lng is not None:
+                # 필요하다면 city/district/address 는 역지오로 채움
+                loc, _ = Location.objects.get_or_create(
+                    latitude=lat, longitude=lng,
+                    defaults=dict(city="", district="", region="", address="")
+                )
+
+        # 2) Report 생성 (무인증이므로 user=None, report_date는 모델 default 사용)
+        report = Report.objects.create(
+            user=None,                     # 모델이 null 허용이어야 함(앞서 안내)
+            animal=animal,
+            location=loc,
+            status=validated["status"],
+            image=validated["photo"],      # 모델 필드명: image
+        )
+        return report
 
 class SavedPlaceReadSerializer(serializers.ModelSerializer):
     # 출력 필드: 요청하신 그대로

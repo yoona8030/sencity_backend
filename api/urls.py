@@ -1,9 +1,6 @@
 # api/urls.py
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
-from rest_framework.routers import SimpleRouter
-
 from . import views
 from .views import (
     SignUpView, LoginView, animal_info, proxy_image_view as image_proxy,
@@ -11,10 +8,12 @@ from .views import (
     ReportViewSet, NotificationViewSet, FeedbackViewSet, StatisticViewSet,
     AdminViewSet, SavedPlaceViewSet,
     MeProfileView, ChangePasswordView, user_profile,
+    # ⬇️ 프론트에서 쓰는 단건 API 3종
+    ReverseGeocodeView, RecognizeAnimalView, ReportNoAuthView,
 )
+# from .views_ai import RecognizeAnimalView
 
 router = DefaultRouter()
-router = SimpleRouter()
 router.register(r'users',           UserViewSet,          basename='user')
 router.register(r'animals',         AnimalViewSet,        basename='animal')
 router.register(r'search-history',  SearchHistoryViewSet, basename='search-history')
@@ -29,29 +28,26 @@ router.register(r'saved-places',    SavedPlaceViewSet,    basename='saved-place'
 urlpatterns = [
     path('', include(router.urls)),
 
-    # JWT
-    path('auth/jwt/create/',  TokenObtainPairView.as_view()),
-    path('auth/jwt/refresh/', TokenRefreshView.as_view()),
-    path("api/auth/jwt/refresh/", TokenRefreshView.as_view(), name="jwt-refresh"),
-
-    # Auth
     path('signup/', SignUpView.as_view()),
     path('login/',  LoginView.as_view()),
 
-    # ✅ 프록시 (프론트의 /api/image-proxy/와 매칭)
     path('image-proxy/', image_proxy, name='image-proxy'),
-
-    # 동물 상세
     path('animal-info/', animal_info, name='animal-info'),
 
-    # 통계
     path('reports/stats/animal/',           views.animal_stats),
     path('reports/stats/region-by-animal/', views.region_by_animal_stats),
     path('reports/stats/animal-raw/',       views.animal_stats_raw),
 
-    # 프로필
     path('user/profile/',         MeProfileView.as_view()),
     path('user/change-password/', ChangePasswordView.as_view()),
 
+    path('location/reverse-geocode', ReverseGeocodeView.as_view()),
+
+    # ✅ 인식 엔드포인트: 한 번만! (여기서는 views.RecognizeAnimalView 사용)
+    path('ai/recognize', RecognizeAnimalView.as_view(), name='ai-recognize'),
+
+    path('reports/no-auth', ReportNoAuthView.as_view()),
+
     path('', include('inquiries.urls')),
 ]
+

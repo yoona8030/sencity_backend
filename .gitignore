@@ -73,4 +73,11 @@ reports_raw.csv
 .DS_Store
 Thumbs.db
 
+# 학습/데이터셋은 깃 추적 제외
+training/
+datasets/
+**/*.zip
+**/*.tar
+**/*.tar.gz
+
 fixtures/reports_staging.csv
