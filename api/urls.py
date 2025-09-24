@@ -1,6 +1,7 @@
 # api/urls.py
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from . import views
 from .views import (
     SignUpView, LoginView, animal_info, proxy_image_view as image_proxy,
@@ -11,7 +12,6 @@ from .views import (
     # ⬇️ 프론트에서 쓰는 단건 API 3종
     ReverseGeocodeView, RecognizeAnimalView, ReportNoAuthView,
 )
-# from .views_ai import RecognizeAnimalView
 
 router = DefaultRouter()
 router.register(r'users',           UserViewSet,          basename='user')
@@ -49,5 +49,8 @@ urlpatterns = [
     path('reports/no-auth', ReportNoAuthView.as_view()),
 
     path('', include('inquiries.urls')),
-]
 
+    path('token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
+    path('token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
+
+]

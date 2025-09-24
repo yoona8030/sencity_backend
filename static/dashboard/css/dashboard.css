@@ -1,268 +1,376 @@
-/* 1) 전체 높이 & 스크롤 제거 */
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+/* ========= 변수 ========= */
+
+:root {
+    --sidebar-w: 200px;
+    /* 사이드바 폭(슬림) */
+    --page-pad-x: 24px;
+    /* 본문 좌/우 패딩 */
+    --page-left-gutter: 24px;
+    /* 좌측 거터 */
+    --card-indent: 16px;
+    --gap: 16px;
+    --panel-pad: 16px;
+    --title-top-gap: 12px;
 }
+
+
+/* ========= 리셋 & 기본 ========= */
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
 html,
 body {
-  height: 100%;
-  overflow: hidden;
+    height: 100%;
+    overflow: auto;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    /* ↓ 추가 */
+    overflow-x: hidden;
+    /* 가로 넘침 방지 */
 }
 
-/* 2) 좌우 분할 컨테이너 */
 .container {
-  display: flex;
-  height: 100vh; /* 브라우저 뷰포트 전체 높이 */
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    min-height: 100vh;
 }
 
-/* 3) 사이드바 */
+
+/* ========= 사이드바 ========= */
+
 .sidebar {
-  width: 260px; /* 살짝 너비 축소 */
-  background-color: #feba15;
-  display: flex;
-  flex-direction: column;
-  padding: 10px 0; /* 상하 패딩 줄임 */
-  overflow-y: auto; /* 내용 많아지면 사이드바만 스크롤 */
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: var(--sidebar-w);
+    height: 100vh;
+    background: #feba15;
+    display: flex;
+    flex-direction: column;
+    padding: 8px 0;
+    overflow: hidden;
+    z-index: 1000;
 }
 
-/* 브랜드 타이틀 */
 .sidebar-brand {
-  padding-left: 16px;
-  text-align: left;
-  font-size: 1.1rem; /* 크기를 조금 줄임 */
-  font-weight: bold;
-  color: #333;
-  margin-bottom: 12px; /* 마진 줄임 */
+    padding-left: 14px;
+    text-align: left;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #333;
+    margin-bottom: 10px;
 }
 
-/* 로고 + 이름 */
 .sidebar-logo {
-  display: flex;
-  align-items: center;
-  gap: 8px; /* 아이콘과 텍스트 간격 줄임 */
-  padding: 0 16px;
-  margin-bottom: 12px; /* 마진 줄임 */
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 14px;
+    margin-bottom: 10px;
 }
+
 .sidebar-logo img {
-  width: 24px;
-  height: 24px; /* 이미지 크기 축소 */
+    width: 22px;
+    height: 22px;
 }
+
 .sidebar-logo span {
-  font-size: 0.9rem; /* 텍스트 크기 축소 */
-  font-weight: bold;
-  color: #333;
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #333;
 }
 
-/* 외부 링크 */
 .sidebar-link {
-  display: flex;
-  align-items: center;
-  gap: 6px; /* 간격 줄임 */
-  padding: 6px 16px; /* 패딩 줄임 */
-  color: #333;
-  text-decoration: none;
-  font-size: 0.9rem; /* 크기 축소 */
-  font-weight: bold;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    color: #333;
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 700;
 }
+
 .sidebar-link i {
-  font-size: 0.9rem;
+    font-size: 0.9rem;
 }
 
-/* 구분선 */
 .sidebar hr {
-  width: 100%;
-  border: none;
-  border-top: 1px solid rgba(0, 0, 0, 0.1);
-  margin: 10px 0; /* 여백 줄임 */
+    width: 100%;
+    border: none;
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    margin: 8px 0;
 }
 
-/* 메뉴 그룹 */
 .sidebar-menu {
-  display: flex;
-  flex-direction: column;
-  gap: 4px; /* 메뉴 간격 줄임 */
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
 }
+
 .menu-group {
-  padding: 6px 16px; /* 패딩 줄임 */
-  font-size: 0.8rem; /* 크기 축소 */
-  color: #555;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-top: 8px; /* 여백 줄임 */
+    padding: 6px 14px;
+    font-size: 0.8rem;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 6px;
 }
 
-/* 메뉴 아이템 */
 .menu-item {
-  display: flex;
-  align-items: center;
-  gap: 10px; /* 간격 줄임 */
-  padding: 6px 16px; /* 패딩 줄임 */
-  color: #333;
-  text-decoration: none;
-  font-size: 0.9rem; /* 크기 축소 */
-  font-weight: bold;
-  border-radius: 4px;
-  margin-top: 4px; /* 여백 줄임 */
-  transition: background 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    color: #333;
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 700;
+    border-radius: 6px;
+    margin-top: 4px;
+    transition: background 0.2s;
 }
+
 .menu-item i {
-  width: 18px;
-  text-align: center;
-  font-size: 1rem;
-  font-family: 'Font Awesome 6 Free';
-  font-weight: 900;
+    width: 18px;
+    text-align: center;
+    font-size: 1rem;
+    font-family: 'Font Awesome 6 Free';
+    font-weight: 900;
 }
+
 .menu-item:hover {
-  background-color: rgba(0, 0, 0, 0.05);
+    background: rgba(0, 0, 0, 0.05);
 }
 
-/* 4) 메인 콘텐츠 */
+.menu-item.active {
+    background: #1f2937;
+    color: #fff;
+}
+
+
+/* ========= 본문 래퍼 ========= */
+
+.container>.main,
+.container>.main-content,
+main.main,
+main.main-content {
+    margin-left: var(--sidebar-w);
+    padding: 12px var(--page-pad-x);
+    box-sizing: border-box;
+}
+
 .main-content {
-  flex: 1;
-  background-color: #ffffff;
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  overflow-y: auto; /* 메인만 스크롤 */
+    width: min(1400px, calc(100vw - var(--sidebar-w) - var(--page-pad-x) * 2));
+    margin: 0 auto;
+    /* ↓ 추가 */
+    min-width: 0;
+    /* 내부 그리드가 커져도 밀어내지 않게 */
+    overflow-x: hidden;
+    /* 가로 스크롤 차단 */
 }
 
-/* 5) 헤더 + 본문 그리드 래퍼 */
+
+/* 타이틀 공통 */
+
+.main-content .dashboard-body,
+.main-content .dashboard-body.wrap {
+    padding-top: var(--title-top-gap);
+}
+
 .dashboard-body {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-}
-.dashboard-body > h1 {
-  padding: 0 16px 12px; /* 아래 여백 살짝 줄임 */
-  font-size: 2rem;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    padding: 0 var(--page-pad-x) 0 var(--page-left-gutter);
 }
 
-/* 6) 그리드 레이아웃 */
-.dashboard-grid {
-  display: grid;
-  flex: 1;
-  grid-template-columns: 1fr 2fr;
-  grid-template-rows: auto auto; /* auto로 두 패널 높이 자동 */
-  grid-template-areas:
-    'devices video'
-    'sensors video';
-  gap: 16px; /* 간격 소폭 조정 */
-  padding: 0 16px 16px;
-}
-.devices-panel {
-  grid-area: devices;
-}
-.video-panel {
-  grid-area: video;
-}
-.sensors-panel {
-  grid-area: sensors;
+
+/* 내부 컨테이너가 그리드를 밀어내지 않도록 */
+
+.dashboard-body,
+.dashboard-body.wrap {
+    min-width: 0;
 }
 
-/* 7) 패널 공통 */
+.dashboard-body>h1,
+.dashboard-body>h1.page-title,
+.dashboard-body>.page-title {
+    margin: 8px 0 16px;
+    padding: 0;
+    text-align: left;
+    font-size: 2.25rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+}
+
+.dashboard-body>h1,
+.dashboard-body.wrap>h1 {
+    margin-top: 0;
+}
+
+.dashboard-body>.card,
+.dashboard-body>.page-card,
+.dashboard-body>.table-scroll {
+    margin-left: var(--card-indent);
+}
+
+
+/* ========= 패널/테이블 등(기존 규칙 유지) ========= */
+
 .panel {
-  background-color: #f8f4e1;
-  border-radius: 8px;
-  padding: 12px; /* 패딩 살짝 줄임 */
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-  display: flex;
-  flex-direction: column;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: var(--panel-pad) calc(var(--panel-pad) + 8px);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
 }
+
 .panel h2 {
-  font-size: 1rem; /* 크기 축소 */
-  font-weight: bold;
-  margin-bottom: 8px; /* 여백 줄임 */
-  color: #333;
+    font-size: 1rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: #333;
 }
 
-/* 8) CCTV 디바이스 현황 */
-.devices-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px; /* 간격 줄임 */
-}
-.device-card {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px; /* 패딩 줄임 */
-  border-radius: 6px;
-  background-color: #f8f4e1;
-}
-.device-card.online {
-  background-color: #feba15;
-}
-.device-card.offline {
-  background-color: #e0e0e0;
-}
-.device-left {
-  display: flex;
-  align-items: center;
-  gap: 6px; /* 간격 줄임 */
-}
-.device-left i {
-  font-size: 1.2rem; /* 아이콘 크기 축소 */
-  font-family: 'Font Awesome 6 Free';
-  font-weight: 900;
-}
-.device-info .name {
-  font-weight: bold;
-  font-size: 0.9rem;
-}
-.device-info .status {
-  font-size: 0.75rem;
-  color: #555;
-}
-.device-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background-color: #dd0000;
-}
-.device-card.online .device-dot {
-  background-color: #4caf50;
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
 }
 
-/* 9) 실시간 영상 */
-.video-panel {
-  background-color: #ececec;
-  flex-direction: column;
-}
-.video-panel video {
-  flex: 1;
-  width: 100%;
-  border-radius: 6px;
-  object-fit: cover;
+.table thead th {
+    background: #fafafa;
+    font-weight: 700;
+    color: #374151;
 }
 
-/* 10) 모션 센서 */
-.sensors-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px; /* 간격 줄임 */
+.table th,
+.table td {
+    padding: 12px 14px;
+    border-bottom: 1px solid #eee;
+    vertical-align: middle;
+    word-break: keep-all;
 }
-.sensor-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  background-color: #e0e0e0;
-  border-radius: 6px;
-  padding: 10px; /* 패딩 줄임 */
-  gap: 4px; /* 간격 줄임 */
+
+.table td:nth-child(2) {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
-.sensor-card.detected {
-  background-color: #dd0000;
-  color: white;
+
+.table th:nth-child(1),
+.table td:nth-child(1),
+.table th:nth-child(3),
+.table td:nth-child(3),
+.table th:nth-child(4),
+.table td:nth-child(4) {
+    white-space: nowrap;
 }
-.sensor-card i {
-  font-size: 1.2rem; /* 아이콘 크기 축소 */
-  font-family: 'Font Awesome 6 Free';
-  font-weight: 900;
+
+
+/* ========= 큰 화면에서 본문 더 넓게 ========= */
+
+@media (min-width: 1400px) {
+    .main-content {
+        width: min(1760px, calc(100vw - var(--sidebar-w) - var(--page-pad-x) * 2));
+    }
 }
-.sensor-text {
-  font-size: 0.75rem; /* 텍스트 크기 축소 */
-  text-align: center;
+
+@media (min-width: 1680px) {
+    .main-content {
+        width: min(1880px, calc(100vw - var(--sidebar-w) - var(--page-pad-x) * 2));
+    }
+}
+
+
+/* ========= 반응형(사이드바/타이포 살짝 슬림) ========= */
+
+@media (max-width: 1200px) {
+     :root {
+        --page-left-gutter: 32px;
+        --card-indent: 12px;
+    }
+    .sidebar-brand {
+        font-size: 0.98rem;
+    }
+    .sidebar-logo {
+        padding: 0 12px;
+        gap: 6px;
+    }
+    .sidebar-logo img {
+        width: 20px;
+        height: 20px;
+    }
+    .sidebar-logo span {
+        font-size: 0.85rem;
+    }
+    .menu-group {
+        padding: 6px 12px;
+        font-size: 0.78rem;
+    }
+    .menu-item {
+        padding: 6px 12px;
+        gap: 6px;
+        font-size: 0.9rem;
+    }
+    .menu-item i {
+        width: 16px;
+        font-size: 0.95rem;
+    }
+    .sidebar-link {
+        padding: 6px 12px;
+        gap: 6px;
+        font-size: 0.88rem;
+    }
+}
+
+@media (max-width: 1024px) {
+     :root {
+        --page-left-gutter: 24px;
+        --card-indent: 8px;
+        --sidebar-w: 188px;
+    }
+    .menu-item i {
+        width: 15px;
+        font-size: 0.9rem;
+    }
+}
+
+
+/* ========= Analytics 페이지 전용 정렬 ========= */
+
+.page-analytics .dashboard-body {
+    /* 다른 화면과 동일 높이 라인에 맞추기 */
+    padding: 24px var(--page-pad-x) 0 var(--page-pad-x);
+}
+
+.page-analytics .page-title {
+    margin: 0 0 10px 0;
+}
+
+.page-analytics .global-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 6px 0 18px;
+    /* ↓ 추가 */
+    flex-wrap: wrap;
+    /* 화면이 좁아지면 줄바꿈 */
+    min-width: 0;
+}
+
+.page-analytics .global-toolbar>* {
+    min-width: 0;
+}
+
+
+/* 입력/셀렉트가 폭을 줄일 수 있게 */
+
+.page-analytics .dashboard-body>.card,
+.page-analytics .dashboard-body>.page-card,
+.page-analytics .dashboard-body>.table-scroll {
+    margin-left: 0;
 }

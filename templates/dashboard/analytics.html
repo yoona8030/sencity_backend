@@ -1,0 +1,496 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>관리자 페이지 | 데이터 분석 및 통계</title>
+
+    <!-- 아이콘 & 공통 CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" />
+    <link rel="stylesheet" href="{% static 'dashboard/css/dashboard.css' %}?v=fit-2025-09-19-merge" />
+    <link rel="stylesheet" href="{% static 'dashboard/css/analytics.css' %}?v=8-click" />
+</head>
+
+<body class="page-analytics">
+    <div class="container">
+        <!-- 사이드바 -->
+        <aside class="sidebar">
+            <div class="sidebar-brand">관리자 페이지</div>
+            <div class="sidebar-logo">
+                <img src="{% static 'dashboard/images/logo.png' %}" alt="SENCITY" />
+                <span>SENCITY</span>
+            </div>
+            <a href="{% url 'admin:index' %}" class="sidebar-link">
+                <i class="fa-solid fa-arrow-up-right-from-square"></i> 사이트 바로가기
+            </a>
+            <hr />
+            <nav class="sidebar-menu">
+                <div class="menu-group">사이트 관리</div>
+                <a href="{% url 'dashboard:home' %}" class="menu-item">
+                    <i class="fa-solid fa-th-large"></i> 대시보드
+                </a>
+                <a href="{% url 'dashboard:cctv' %}" class="menu-item">
+                    <i class="fa-solid fa-camera"></i> CCTV 관리
+                </a>
+                <a href="{% url 'dashboard:reports' %}" class="menu-item">
+                    <i class="fa-solid fa-tv"></i> 신고 처리 및 관리
+                </a>
+                <a href="{% url 'dashboard:settings' %}" class="menu-item">
+                    <i class="fa-solid fa-gear"></i> 설정
+                </a>
+                <a href="{% url 'dashboard:users' %}" class="menu-item">
+                    <i class="fa-solid fa-user"></i> 사용자 관리
+                </a>
+
+                <div class="menu-group">콘텐츠 및 통계</div>
+                <a href="{% url 'dashboard:analytics' %}" class="menu-item active">
+                    <i class="fa-solid fa-chart-column"></i> 데이터 분석 및 통계
+                </a>
+                <a href="{% url 'dashboard:contents' %}" class="menu-item">
+                    <i class="fa-solid fa-file-lines"></i> 콘텐츠 관리
+                </a>
+                <a href="{% url 'dashboard:notices' %}" class="menu-item">
+                    <i class="fa-solid fa-bell"></i> 공지 설정
+                </a>
+            </nav>
+        </aside>
+
+        <!-- 본문 -->
+        <main class="main-content">
+            <div class="dashboard-body wrap">
+                <h1 class="page-title">데이터 분석 및 통계</h1>
+
+                <!-- 전역 연도 선택 -->
+                <div class="global-toolbar">
+                    <div class="spacer"></div>
+                    <label for="year-global" style="font-weight: 700">연도</label>
+                    <select id="year-global"></select>
+                    <button id="apply-global">적용</button>
+                </div>
+
+                <!-- KPI -->
+                <section class="kpis">
+                    <div class="kpi card">
+                        <div class="kpi-title">연간 총 신고 수</div>
+                        <div class="kpi-value" id="kpi-total">-</div>
+                    </div>
+                    <div class="kpi card">
+                        <div class="kpi-title">월 평균</div>
+                        <div class="kpi-value" id="kpi-avg">-</div>
+                    </div>
+                    <div class="kpi card">
+                        <div class="kpi-title">최다 신고 월</div>
+                        <div class="kpi-value" id="kpi-peak">-</div>
+                    </div>
+                    <div class="kpi card">
+                        <div class="kpi-title">최다 동물</div>
+                        <div class="kpi-value" id="kpi-top">-</div>
+                    </div>
+                </section>
+
+                <!-- 3열 -->
+                <section class="cards3">
+                    <!-- 바차트 -->
+                    <div class="card">
+                        <h2>월별 신고 건수</h2>
+                        <div class="chart-box"><canvas id="barMonthly"></canvas></div>
+                    </div>
+
+                    <!-- 도넛 -->
+                    <div class="card">
+                        <h2>분포 (동물 / 지역)</h2>
+                        <div class="donut-pair">
+                            <div class="mini-chart-box">
+                                <div class="mini-title">동물별</div>
+                                <canvas id="donutAnimal"></canvas>
+                                <div id="legend-animal" class="legend"></div>
+                            </div>
+                            <div class="mini-chart-box">
+                                <div class="mini-title">지역별</div>
+                                <canvas id="donutRegion"></canvas>
+                                <div id="legend-region" class="legend"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 라인 -->
+                    <div class="card">
+                        <h2>월별 신고 추이</h2>
+                        <div class="chart-box"><canvas id="lineMonthly"></canvas></div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- 모달(동물/지역 탭) -->
+    <div id="modal-mask" class="modal-mask">
+        <div class="modal">
+            <h3 id="modal-title">상세</h3>
+            <div class="modal-tabs">
+                <button id="tab-animals" class="on">동물별</button>
+                <button id="tab-regions">지역별</button>
+            </div>
+            <div class="list" id="modal-list-animals"></div>
+            <div class="list" id="modal-list-regions" style="display: none"></div>
+            <button class="close" id="modal-close">
+          <i class="fa-solid fa-xmark"></i>
+          닫기
+        </button>
+        </div>
+    </div>
+
+    <script>
+        /* ========= 유틸 ========= */
+        const $ = (id) => document.getElementById(id);
+
+        function getParam(name) {
+            const u = new URL(location.href);
+            return u.searchParams.get(name);
+        }
+
+        function setParam(name, val) {
+            const u = new URL(location.href);
+            u.searchParams.set(name, val);
+            history.replaceState(null, '', u.toString());
+        }
+
+        function fillYears(id) {
+            const sel = $(id),
+                years = [2024, 2025, 2026];
+            sel.innerHTML = years.map((y) => `<option value="${y}">${y}</option>`).join('');
+            const q = parseInt(getParam('year') || '', 10);
+            sel.value = Number.isInteger(q) && years.includes(q) ? q : new Date().getFullYear() <= 2026 ? new Date().getFullYear() : 2025;
+        }
+
+        function fetchJSON(url) {
+            return fetch(url, {
+                credentials: 'same-origin'
+            }).then((r) => {
+                if (!r.ok) throw new Error('fetch');
+                return r.json();
+            });
+        }
+
+        /* ========= 모달 ========= */
+        const modalMask = $('modal-mask');
+        const modalTitle = $('modal-title');
+        const listAnimals = $('modal-list-animals');
+        const listRegions = $('modal-list-regions');
+
+        $('modal-close').addEventListener('click', () => (modalMask.style.display = 'none'));
+        modalMask.addEventListener('click', (e) => {
+            if (e.target === modalMask) modalMask.style.display = 'none';
+        });
+
+        $('tab-animals').addEventListener('click', () => {
+            $('tab-animals').classList.add('on');
+            $('tab-regions').classList.remove('on');
+            listAnimals.style.display = 'block';
+            listRegions.style.display = 'none';
+        });
+        $('tab-regions').addEventListener('click', () => {
+            $('tab-regions').classList.add('on');
+            $('tab-animals').classList.remove('on');
+            listAnimals.style.display = 'none';
+            listRegions.style.display = 'block';
+        });
+
+        function fillList(el, rows) {
+            el.innerHTML =
+                rows && rows.length ?
+                rows.map((r) => `<div class="item"><span>${String(r[0])}</span><span>${String(r[1])}</span></div>`).join('') :
+                '<div class="item"><span>항목 없음</span><span>0</span></div>';
+        }
+
+        function openBreakdownModal(title, animals, regions) {
+            modalTitle.textContent = title;
+            fillList(listAnimals, animals);
+            fillList(listRegions, regions);
+            // 기본 탭: 동물
+            $('tab-animals').click();
+            modalMask.style.display = 'flex';
+        }
+
+        /* ========= 캔버스 렌더 ========= */
+        // 클릭 판정용 전역 좌표 저장
+        let BAR_RECTS = []; // [{x,y,w,h,idx}]
+        let LINE_POINTS = []; // [{x,y,idx}]
+
+        function drawDonut(canvas, pairs, legendBox, onLegendClick) {
+            const ctx = canvas.getContext('2d');
+            const W = (canvas.width = canvas.clientWidth),
+                H = (canvas.height = canvas.clientHeight);
+            ctx.clearRect(0, 0, W, H);
+            const cx = W / 2,
+                cy = H / 2,
+                r = Math.min(W, H) / 2 - 8,
+                inner = r * 0.58;
+            const colors = ['#64b5f6', '#81c784', '#ffd54f', '#e57373', '#4db6ac', '#ba68c8', '#90a4ae'];
+
+            if (!pairs || !pairs.length) {
+                ctx.strokeStyle = '#e5e7eb';
+                ctx.lineWidth = r - inner;
+                ctx.beginPath();
+                ctx.arc(cx, cy, (r + inner) / 2, 0, Math.PI * 2);
+                ctx.stroke();
+                if (legendBox) {
+                    legendBox.innerHTML =
+                        '<div class="legend-item"><span class="legend-swatch" style="background:#e5e7eb"></span>데이터 없음</div>';
+                }
+                return;
+            }
+
+            let total = pairs.reduce((s, p) => s + (+p[1] || 0), 0) || 1;
+            let a = -Math.PI / 2;
+            pairs.forEach((p, i) => {
+                const v = +p[1] || 0,
+                    sweep = (v / total) * Math.PI * 2;
+                ctx.beginPath();
+                ctx.moveTo(cx, cy);
+                ctx.arc(cx, cy, r, a, a + sweep);
+                ctx.closePath();
+                ctx.fillStyle = colors[i % colors.length];
+                ctx.fill();
+                a += sweep;
+            });
+            ctx.globalCompositeOperation = 'destination-out';
+            ctx.beginPath();
+            ctx.arc(cx, cy, inner, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.globalCompositeOperation = 'source-over';
+
+            if (legendBox) {
+                legendBox.innerHTML = pairs
+                    .map((p, i) => {
+                        const lb = String(p[0] || '미상'),
+                            sw = colors[i % colors.length];
+                        const clickable = typeof onLegendClick === 'function' && lb === '기타';
+                        return `<div class="legend-item" data-label="${lb}"${clickable ? ' style="cursor:pointer;text-decoration:underline"' : ''}>
+                    <span class="legend-swatch" style="background:${sw}"></span>${lb}
+                  </div>`;
+                    })
+                    .join('');
+                if (typeof onLegendClick === 'function') {
+                    legendBox.querySelectorAll('[data-label]').forEach((n) => {
+                        n.addEventListener('click', () => onLegendClick(n.getAttribute('data-label')));
+                    });
+                }
+            }
+        }
+
+        function drawBar(canvas, labels, values) {
+            const ctx = canvas.getContext('2d');
+            const W = (canvas.width = canvas.clientWidth),
+                H = (canvas.height = canvas.clientHeight);
+            ctx.clearRect(0, 0, W, H);
+            const pad = 32;
+            const max = values.reduce((m, v) => Math.max(m, v || 0), 1);
+            const step = (W - pad * 2) / Math.max(values.length, 1),
+                bw = step * 0.6;
+
+            // axes
+            ctx.strokeStyle = '#e5e7eb';
+            ctx.beginPath();
+            ctx.moveTo(pad, pad);
+            ctx.lineTo(pad, H - pad);
+            ctx.lineTo(W - pad, H - pad);
+            ctx.stroke();
+
+            // bars
+            ctx.fillStyle = '#90caf9';
+            BAR_RECTS = [];
+            values.forEach((v, i) => {
+                const h = (H - pad * 2) * (v / max);
+                const x = pad + i * step + (step - bw) / 2,
+                    y = H - pad - h;
+                ctx.fillRect(x, y, bw, h);
+                BAR_RECTS.push({
+                    x,
+                    y,
+                    w: bw,
+                    h,
+                    idx: i
+                });
+            });
+
+            // labels
+            ctx.fillStyle = '#555';
+            ctx.font = '12px system-ui';
+            labels.forEach((lb, i) => ctx.fillText(String(lb || '').slice(5), pad + i * step + 2, H - pad + 14));
+        }
+
+        function drawLine(canvas, labels, values) {
+            const ctx = canvas.getContext('2d');
+            const W = (canvas.width = canvas.clientWidth),
+                H = (canvas.height = canvas.clientHeight);
+            ctx.clearRect(0, 0, W, H);
+            const pad = 32;
+            const max = values.reduce((m, v) => Math.max(m, v || 0), 1);
+            const step = (W - pad * 2) / Math.max(values.length - 1, 1);
+
+            ctx.strokeStyle = '#e5e7eb';
+            ctx.beginPath();
+            ctx.moveTo(pad, pad);
+            ctx.lineTo(pad, H - pad);
+            ctx.lineTo(W - pad, H - pad);
+            ctx.stroke();
+
+            ctx.strokeStyle = '#64b5f6';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            LINE_POINTS = [];
+            values.forEach((v, i) => {
+                const x = pad + i * step,
+                    y = H - pad - (H - pad * 2) * ((v || 0) / max);
+                LINE_POINTS.push({
+                    x,
+                    y,
+                    idx: i
+                });
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            });
+            ctx.stroke();
+
+            ctx.fillStyle = '#64b5f6';
+            LINE_POINTS.forEach((p) => {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        /* ========= 데이터 로드 ========= */
+        let CURRENT_YEAR = new Date().getFullYear();
+        let MONTH_LABELS = []; // "YYYY-MM"
+        let MONTH_VALUES = []; // counts
+
+        function computeKPI(months, counts, top) {
+            const total = counts.reduce((s, n) => s + (n || 0), 0);
+            const avg = (total / 12).toFixed(1);
+            let pk = -1,
+                mx = -1;
+            counts.forEach((v, i) => {
+                if (v > mx) {
+                    mx = v;
+                    pk = i;
+                }
+            });
+            $('kpi-total').textContent = String(total);
+            $('kpi-avg').textContent = String(avg);
+            $('kpi-peak').textContent = pk >= 0 && months[pk] ? months[pk] : '-';
+            $('kpi-top').textContent = typeof top === 'string' && top ? top : '-';
+        }
+
+        function loadAll(year) {
+            CURRENT_YEAR = year;
+            fetchJSON('/dashboard/api/analytics/?year=' + encodeURIComponent(year)).then((d) => {
+                const months = Array.isArray(d.months) ? d.months : [];
+                const counts = Array.isArray(d.counts) ? d.counts.map((n) => +n || 0) : [];
+                const top = d && typeof d.top_animal === 'string' && d.top_animal ? d.top_animal : '-';
+
+                MONTH_LABELS = months;
+                MONTH_VALUES = counts;
+
+                computeKPI(months, counts, top);
+
+                drawBar($('barMonthly'), months, counts);
+
+                const aTop = Array.isArray(d.by_animal_top) ? d.by_animal_top : [],
+                    aEtc = Array.isArray(d.by_animal_others) ? d.by_animal_others : [],
+                    rTop = Array.isArray(d.by_region_top) ? d.by_region_top : [],
+                    rEtc = Array.isArray(d.by_region_others) ? d.by_region_others : [];
+                drawDonut($('donutAnimal'), aTop, $('legend-animal'), (lb) => {
+                    if (lb === '기타') openBreakdownModal('동물별 · 기타', aEtc, []);
+                });
+                drawDonut($('donutRegion'), rTop, $('legend-region'), (lb) => {
+                    if (lb === '기타') openBreakdownModal('지역별 · 기타', [], rEtc);
+                });
+
+                drawLine($('lineMonthly'), months, counts);
+            });
+        }
+
+        /* ========= 월 상세(동물/지역) =========
+       백엔드 응답 예시:
+       GET /dashboard/api/analytics/month-breakdown/?year=2025&month=06
+       {
+         "animals": [["고라니", 3], ["너구리", 1]],
+         "regions": [["송도국제도시 잉근 하천", 2], ["수변공원", 2]]
+       }
+    */
+        function getMonthBreakdown(year, monthIdx) {
+            const ym = MONTH_LABELS[monthIdx]; // "YYYY-MM"
+            const m = ym ? ym.slice(5, 7) : String(monthIdx + 1).padStart(2, '0');
+            const y = ym ? ym.slice(0, 4) : String(year);
+            const url = `/dashboard/api/analytics/month-breakdown/?year=${encodeURIComponent(y)}&month=${encodeURIComponent(m)}`;
+            return fetchJSON(url).catch(() => ({
+                animals: [],
+                regions: []
+            }));
+        }
+
+        function formatYM(idx) {
+            const ym = MONTH_LABELS[idx] || `${CURRENT_YEAR}-${String(idx + 1).padStart(2, '0')}`;
+            return ym;
+        }
+
+        /* ========= 인터랙션 바인딩 ========= */
+        // 바차트 클릭
+        $('barMonthly').addEventListener('click', (e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            const x = e.clientX - rect.left,
+                y = e.clientY - rect.top;
+            const hit = BAR_RECTS.find((r) => x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h);
+            if (!hit) return;
+            const ym = formatYM(hit.idx);
+            getMonthBreakdown(CURRENT_YEAR, hit.idx).then((d) => {
+                openBreakdownModal(`${ym} · 상세`, d.animals || [], d.regions || []);
+            });
+        });
+
+        // 라인차트 클릭(가까운 점 스냅)
+        $('lineMonthly').addEventListener('click', (e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            const x = e.clientX - rect.left,
+                y = e.clientY - rect.top;
+            let best = null,
+                bd = 1e9;
+            LINE_POINTS.forEach((p) => {
+                const dx = p.x - x,
+                    dy = p.y - y,
+                    d = dx * dx + dy * dy;
+                if (d < bd) {
+                    bd = d;
+                    best = p;
+                }
+            });
+            if (!best) return;
+            const ym = formatYM(best.idx);
+            getMonthBreakdown(CURRENT_YEAR, best.idx).then((d) => {
+                openBreakdownModal(`${ym} · 상세`, d.animals || [], d.regions || []);
+            });
+        });
+
+        /* ========= 초기화 ========= */
+        (function() {
+            fillYears('year-global');
+            const sel = $('year-global'),
+                btn = $('apply-global');
+            const go = () => {
+                const y = Number(sel.value) || new Date().getFullYear();
+                setParam('year', y);
+                loadAll(y);
+            };
+            btn.addEventListener('click', go);
+            sel.addEventListener('change', go);
+            window.addEventListener('resize', () => loadAll(CURRENT_YEAR));
+            go();
+        })();
+    </script>
+</body>
+
+</html>

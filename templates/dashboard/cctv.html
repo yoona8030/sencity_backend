@@ -1,0 +1,253 @@
+{% extends "dashboard/base.html" %} {% load static %} {% block title %}CCTV 관리{% endblock %} {% block extra_head %}
+<link rel="stylesheet" href="{% static 'dashboard/css/cctv.css' %}?v=2025-09-24-fit" /> {% endblock %} {% block content %}
+<!-- 공통 여백/타이틀 규칙을 그대로 타게 하는 래퍼 -->
+<div class="dashboard-body wrap page-cctv">
+    <h1 class="page-title">CCTV 관리</h1>
+
+    <!-- 좌: 디바이스/센서 스택 / 우: 뷰어 한 장 -->
+    <section class="cctv-grid">
+        <!-- 좌측 -->
+        <aside class="left-col">
+            <!-- 디바이스 현황 -->
+            <article class="card devices-card">
+                <h2 class="card-title">CCTV 디바이스 현황</h2>
+                <ul id="device-list" class="device-list">
+                    <!-- JS 렌더 -->
+                </ul>
+            </article>
+
+            <!-- 모션 센서 -->
+            <article class="card sensors-card">
+                <h2 class="card-title">모션 센서</h2>
+                <div id="sensor-grid" class="sensor-grid">
+                    <!-- JS 렌더 -->
+                </div>
+            </article>
+        </aside>
+
+        <!-- 우측: 메인 뷰어(탭으로 카메라 전환) -->
+        <div class="right-col">
+            <article class="card viewer-card">
+                <div class="viewer-head">
+                    <span class="viewer-title" id="viewer-title">실시간 영상 · 카메라 1</span>
+
+                    <!-- 카메라 전환 탭 -->
+                    <div class="cam-tabs" role="tablist" aria-label="카메라 전환">
+                        <button class="cam-tab is-active" data-cam="1" aria-selected="true">1</button>
+                        <button class="cam-tab" data-cam="2">2</button>
+                        <button class="cam-tab" data-cam="3">3</button>
+                        <button class="cam-tab" data-cam="4">4</button>
+                    </div>
+                </div>
+
+                <!-- 남은 높이를 영상이 채우게 -->
+                <div class="viewer-body">
+                    <!-- 이미지/비디오 토글용 두 엘리먼트(기본: 비디오) -->
+                    <img id="viewer-img" class="viewer-media" alt="카메라 1" style="display: none" />
+                    <video id="viewer-video" class="viewer-media" autoplay muted loop playsinline controls style="display: block">
+            <source id="viewer-source" src="{% static 'dashboard/videos/sample.mp4' %}" type="video/mp4" />
+            HTML5 동영상을 지원하지 않는 브라우저입니다.
+          </video>
+                </div>
+
+                <div class="viewer-foot" id="viewer-foot">카메라 1</div>
+            </article>
+        </div>
+    </section>
+</div>
+
+<!-- 페이지 전용 JS -->
+<script>
+    (function() {
+        var API_DEVICES = '/dashboard/api/cctv-devices/';
+        var API_SENSORS = '/dashboard/api/cctv-sensors/';
+
+        /* 샘플 소스(서비스에서는 실제 스트림/스냅샷 URL로 교체) */
+        var CAM_SOURCES = {
+            1: {
+                type: 'video',
+                src: '{% static "dashboard/videos/sample.mp4" %}'
+            },
+            2: {
+                type: 'image',
+                src: '{% static "dashboard/images/sample_cctv_2.jpg" %}'
+            },
+            3: {
+                type: 'image',
+                src: '{% static "dashboard/images/sample_cctv_3.jpg" %}'
+            },
+            4: {
+                type: 'image',
+                src: '{% static "dashboard/images/sample_cctv_4.jpg" %}'
+            },
+        };
+
+        function safeFetch(url) {
+            return fetch(url, {
+                credentials: 'same-origin'
+            }).then(function(r) {
+                if (!r.ok) throw new Error('fetch error');
+                return r.json();
+            });
+        }
+
+        /* 디바이스 렌더 */
+        function renderDevices(items) {
+            var list = document.getElementById('device-list');
+            if (!list) return;
+            if (!items || !items.length) {
+                list.innerHTML = '<li class="device-empty">디바이스 데이터가 없습니다.</li>';
+                return;
+            }
+            list.innerHTML = items
+                .map(function(d, i) {
+                    var online = !!d.online;
+                    var cls = online ? 'online' : 'offline';
+                    var st = online ? 'ONLINE' : 'OFFLINE';
+                    var name = d.name || 'CCTV ' + (i + 1);
+                    return (
+                        '<li class="device-item ' +
+                        cls +
+                        '">' +
+                        '<div class="device-left">' +
+                        '<i class="fa-solid fa-video"></i>' +
+                        '<div class="device-info">' +
+                        '<div class="name">' +
+                        name +
+                        '</div>' +
+                        '<div class="state">' +
+                        st +
+                        '</div>' +
+                        '</div>' +
+                        '</div>' +
+                        '<span class="dot ' +
+                        (online ? 'ok' : 'bad') +
+                        '"></span>' +
+                        '</li>'
+                    );
+                })
+                .join('');
+        }
+
+        /* 센서 렌더 */
+        function renderSensors(items) {
+            var grid = document.getElementById('sensor-grid');
+            if (!grid) return;
+            if (!items || !items.length) {
+                grid.innerHTML = '<div class="sensor-empty">센서 데이터가 없습니다.</div>';
+                return;
+            }
+            grid.innerHTML = items
+                .map(function(s, i) {
+                    var det = !!s.detected;
+                    return (
+                        '<div class="sensor ' +
+                        (det ? 'detected' : '') +
+                        '">' +
+                        '<div class="sensor-name">' +
+                        (s.name || 'CCTV ' + (i + 1)) +
+                        '</div>' +
+                        '<div class="sensor-text">' +
+                        (det ? '구역 감지됨' : '구역 오프라인') +
+                        '</div>' +
+                        '</div>'
+                    );
+                })
+                .join('');
+        }
+
+        /* 카메라 전환 */
+        function bindCamTabs() {
+            var tabs = document.querySelectorAll('.cam-tab');
+            var img = document.getElementById('viewer-img');
+            var video = document.getElementById('viewer-video');
+            var vsrc = document.getElementById('viewer-source');
+            var title = document.getElementById('viewer-title');
+            var foot = document.getElementById('viewer-foot');
+
+            function showImage(src, label) {
+                try {
+                    video.pause();
+                } catch (e) {}
+                video.style.display = 'none';
+                img.src = src;
+                img.alt = label;
+                img.style.display = 'block';
+            }
+
+            function showVideo(src, label) {
+                img.style.display = 'none';
+                if (vsrc.src !== src) vsrc.src = src;
+                video.load();
+                video.style.display = 'block';
+                video.play().catch(function() {});
+            }
+
+            function activate(n) {
+                tabs.forEach(function(b) {
+                    var on = b.getAttribute('data-cam') === String(n);
+                    b.classList.toggle('is-active', on);
+                    b.setAttribute('aria-selected', on ? 'true' : 'false');
+                });
+                var cfg = CAM_SOURCES[n] || CAM_SOURCES[1];
+                var label = '카메라 ' + n;
+                if (cfg.type === 'video') showVideo(cfg.src, label);
+                else showImage(cfg.src, label);
+                title.textContent = '실시간 영상 · ' + label;
+                foot.textContent = label;
+            }
+
+            tabs.forEach(function(b) {
+                b.addEventListener('click', function() {
+                    activate(this.getAttribute('data-cam'));
+                });
+            });
+
+            activate(1);
+        }
+
+        function load() {
+            safeFetch(API_DEVICES)
+                .then(renderDevices)
+                .catch(function() {
+                    renderDevices([{
+                        name: 'CCTV 1',
+                        online: true
+                    }, {
+                        name: 'CCTV 2',
+                        online: false
+                    }, {
+                        name: 'CCTV 3',
+                        online: false
+                    }, {
+                        name: 'CCTV 4',
+                        online: false
+                    }, ]);
+                });
+
+            safeFetch(API_SENSORS)
+                .then(renderSensors)
+                .catch(function() {
+                    renderSensors([{
+                        name: 'CCTV 1',
+                        detected: true
+                    }, {
+                        name: 'CCTV 2',
+                        detected: false
+                    }, {
+                        name: 'CCTV 3',
+                        detected: false
+                    }, {
+                        name: 'CCTV 4',
+                        detected: false
+                    }, ]);
+                });
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            load();
+            bindCamTabs();
+        });
+    })();
+</script>
+{% endblock %}

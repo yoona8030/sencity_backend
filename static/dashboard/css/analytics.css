@@ -1,0 +1,386 @@
+:root {
+    --card-pad: 12px;
+    --chart-h: 220px;
+    /* 바/선 */
+    --mini-h: 180px;
+    /* 도넛 */
+    --donut-h: 180px;
+}
+
+
+/* ─────────────────────────────────────
+   레이아웃(사이드바 간격 통일)
+   ───────────────────────────────────── */
+
+.page-analytics .main-content {
+    /* ❗기존 260px 고정값 → 대시보드 전역 변수로 통일 */
+    margin-left: var(--sidebar-w) !important;
+    min-width: 0;
+}
+
+.wrap {
+    padding: 12px 20px 24px;
+}
+
+.page-title {
+    margin: 0 0 12px;
+    font-size: 1.8rem;
+    font-weight: 800;
+}
+
+
+/* 카드 */
+
+.card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: var(--card-pad);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+}
+
+.card h2 {
+    margin: 0 0 8px;
+    font-size: 1rem;
+}
+
+
+/* ─────────────────────────────────────
+   KPI
+   ───────────────────────────────────── */
+
+.kpis {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.kpi-title {
+    font-size: 0.9rem;
+    color: #6b7280;
+}
+
+.kpi-value {
+    font-size: 1.6rem;
+    font-weight: 800;
+    margin-top: 4px;
+}
+
+
+/* ─────────────────────────────────────
+   3열 카드
+   ───────────────────────────────────── */
+
+.cards3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+}
+
+.chart-box {
+    position: relative;
+    height: var(--chart-h);
+}
+
+.chart-box canvas {
+    width: 100% !important;
+    height: 100% !important;
+}
+
+
+/* ==== 차트 툴팁 ==== */
+
+.chart-tip {
+    position: fixed;
+    z-index: 9999;
+    display: none;
+    pointer-events: none;
+    padding: 6px 8px;
+    border-radius: 8px;
+    background: rgba(17, 17, 17, 0.92);
+    color: #fff;
+    font-size: 12px;
+    line-height: 1.35;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
+    max-width: 280px;
+    white-space: pre-line;
+}
+
+
+/* ─────────────────────────────────────
+   도넛 2개: 제목/차트/범례 3행 그리드
+   ───────────────────────────────────── */
+
+.donut-pair {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+.mini-chart-box {
+    position: relative;
+    height: auto;
+    /* 고정높이 해제 */
+    display: grid;
+    /* 제목 / 캔버스 / 범례 3단 */
+    grid-template-rows: auto var(--donut-h) auto;
+    align-content: start;
+    /* 범례가 커져도 위쪽부터 배치 */
+    min-height: 0;
+    /* 내부 스크롤 이슈 방지 */
+}
+
+.mini-title {
+    font-weight: 700;
+    margin: 0 0 4px;
+}
+
+.mini-chart-box canvas {
+    display: block;
+    /* 인라인 여백 제거 */
+    width: 100% !important;
+    height: var(--donut-h) !important;
+}
+
+
+/* 범례 컨테이너: 카드 내부 스크롤 */
+
+#legend-animal,
+#legend-region {
+    margin-top: 10px;
+    max-height: 96px;
+    /* 항목 많을 때 내부 스크롤 */
+    overflow: auto;
+    padding-right: 6px;
+    /* 스크롤 여백 */
+}
+
+
+/* 컨테이너 자체가 .legend인 케이스를 정확히 타겟 */
+
+#legend-animal.legend,
+#legend-region.legend {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-content: start;
+}
+
+#legend-animal .legend-item,
+#legend-region .legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    margin-right: 12px;
+    margin-bottom: 6px;
+}
+
+
+/* 범례 아이템 공통 */
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #374151;
+    white-space: nowrap;
+}
+
+.legend-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex: 0 0 auto;
+}
+
+
+/* ─────────────────────────────────────
+   전역 툴바 (HTML 인라인 → CSS로 이관)
+   ───────────────────────────────────── */
+
+
+/* ===== 공통 페이지 헤더(제목 + 우측 툴바) ===== */
+
+.page-header {
+    display: flex;
+    align-items: flex-end;
+    /* 하단 기준으로 가지런히 */
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+    /* 아래 카드들과 간격 통일 */
+}
+
+.page-title {
+    margin: 0;
+    /* 마진 병합 방지 */
+    line-height: 1.25;
+}
+
+.page-subtitle {
+    margin: 6px 0 0 0;
+    color: #666;
+}
+
+.page-tools {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 2px;
+    /* 제목 베이스라인과 시각적으로 맞춤 */
+}
+
+.page-tools select {
+    height: 36px;
+    padding: 0 10px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.page-tools .btn {
+    height: 36px;
+    padding: 0 14px;
+    border-radius: 10px;
+    border: 1px solid #ddd;
+    background: #fff;
+    font-weight: 600;
+    color: #222;
+}
+
+
+/* 스크린리더 전용 라벨 */
+
+.sr-only {
+    position: absolute !important;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.global-toolbar .spacer {
+    flex: 1 1 auto;
+}
+
+.global-toolbar select,
+.global-toolbar button {
+    height: 34px;
+}
+
+
+/* ─────────────────────────────────────
+   모달 (HTML 인라인 → CSS로 이관)
+   ───────────────────────────────────── */
+
+.modal-mask {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.3);
+    display: none;
+    /* JS로 'flex' 토글 */
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    max-width: 480px;
+    width: 90%;
+    padding: 16px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+}
+
+.modal h3 {
+    margin: 0 0 8px;
+    font-size: 1.05rem;
+}
+
+.modal .list {
+    max-height: 240px;
+    overflow: auto;
+    border-top: 1px solid #eee;
+    margin-top: 8px;
+    padding-top: 8px;
+}
+
+.modal .item {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 4px 0;
+    font-size: 0.95rem;
+}
+
+.modal .close {
+    margin-top: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 8px 12px;
+    background: #f9fafb;
+}
+
+
+/* ─────────────────────────────────────
+   반응형
+   ───────────────────────────────────── */
+
+@media (max-width: 980px) {
+    #legend-animal,
+    #legend-region {
+        max-height: 72px;
+    }
+}
+
+@media (max-width: 1200px) {
+     :root {
+        --chart-h: 200px;
+        --mini-h: 160px;
+        --donut-h: 160px;
+        /* 추가 */
+    }
+}
+
+@media (max-width: 980px) {
+    .kpis {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .cards3 {
+        grid-template-columns: 1fr 1fr;
+    }
+     :root {
+        --chart-h: 180px;
+        --mini-h: 150px;
+        --donut-h: 150px;
+        /* 추가 */
+    }
+}
+
+@media (max-width: 640px) {
+    .kpis {
+        grid-template-columns: 1fr;
+    }
+    .cards3 {
+        grid-template-columns: 1fr;
+    }
+    .donut-pair {
+        grid-template-columns: 1fr;
+    }
+     :root {
+        --chart-h: 180px;
+        --mini-h: 170px;
+        --donut-h: 170px;
+        /* 추가 */
+    }
+}

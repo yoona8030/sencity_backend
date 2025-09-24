@@ -1,0 +1,255 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>관리자 페이지 | 콘텐츠 템플릿</title>
+
+    <!-- 공통 -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" />
+    <link rel="stylesheet" href="{% static 'dashboard/css/dashboard.css' %}?v=fit-2025-09-19" />
+
+    <!-- 이 페이지 전용 -->
+    <link rel="stylesheet" href="{% static 'dashboard/css/contents.css' %}?v=15" />
+</head>
+
+<body class="page-contents">
+    <div class="container">
+        <!-- 사이드바 -->
+        <aside class="sidebar">
+            <div class="sidebar-brand">관리자 페이지</div>
+            <div class="sidebar-logo">
+                <img src="{% static 'dashboard/images/logo.png' %}" alt="SENCITY" />
+                <span>SENCITY</span>
+            </div>
+            <a href="{% url 'admin:index' %}" class="sidebar-link">
+                <i class="fa-solid fa-arrow-up-right-from-square"></i> 사이트 바로가기
+            </a>
+            <hr />
+            <nav class="sidebar-menu">
+                <div class="menu-group">사이트 관리</div>
+                <a href="{% url 'dashboard:home' %}" class="menu-item">
+                    <i class="fa-solid fa-th-large"></i> 대시보드
+                </a>
+                <a href="{% url 'dashboard:cctv' %}" class="menu-item">
+                    <i class="fa-solid fa-camera"></i> CCTV 관리
+                </a>
+                <a href="{% url 'dashboard:reports' %}" class="menu-item">
+                    <i class="fa-solid fa-tv"></i> 신고 처리 및 관리
+                </a>
+                <a href="{% url 'dashboard:settings' %}" class="menu-item">
+                    <i class="fa-solid fa-gear"></i> 설정
+                </a>
+                <a href="{% url 'dashboard:users' %}" class="menu-item">
+                    <i class="fa-solid fa-user"></i> 사용자 관리
+                </a>
+
+                <div class="menu-group">콘텐츠 및 통계</div>
+                <a href="{% url 'dashboard:analytics' %}" class="menu-item">
+                    <i class="fa-solid fa-chart-column"></i> 데이터 분석 및 통계
+                </a>
+                <a href="{% url 'dashboard:contents' %}" class="menu-item active">
+                    <i class="fa-solid fa-file-lines"></i> 콘텐츠 템플릿
+                </a>
+                <a href="{% url 'dashboard:notices' %}" class="menu-item">
+                    <i class="fa-solid fa-bell"></i> 공지 설정
+                </a>
+            </nav>
+        </aside>
+
+        <!-- 본문 -->
+        <main class="main-content" id="main">
+            <div class="dashboard-body wrap">
+                <!-- 타이틀 -->
+                <h1 class="page-title">콘텐츠 템플릿</h1>
+
+                <!-- 툴바 -->
+                <section class="card page-card">
+                    <div class="section-header">
+                        <!-- 좌측: 검색 -->
+                        <div class="section-actions-left">
+                            <input id="q" class="input" type="text" placeholder="제목/태그 검색" />
+                            <button id="btn-search" class="btn">
+                  <i class="fa-solid fa-magnifying-glass"></i>
+                  검색
+                </button>
+                        </div>
+
+                        <!-- 우측: 액션 -->
+                        <div class="section-actions-right">
+                            <select id="templateSelect" class="input select">
+                  <option value="">템플릿 선택</option>
+                  <option value="new-card">신규 기능 카드</option>
+                  <option value="weekly">주간 통계 하이라이트</option>
+                  <option value="safety">안전 수칙 카드</option>
+                  <option value="event">이벤트 안내</option>
+                </select>
+                            <button id="btn-add-template" class="btn ghost">
+                  <i class="fa-regular fa-square-plus"></i>
+                  템플릿 추가
+                </button>
+                            <button id="btn-new" class="btn primary">
+                  <i class="fa-solid fa-plus"></i>
+                  새 콘텐츠
+                </button>
+                        </div>
+                    </div>
+
+                    <!-- 섹션: 추천 템플릿 -->
+                    <h2 class="sec-title">
+                        <i class="fa-solid fa-wand-magic-sparkles"></i> 추천 템플릿
+                    </h2>
+                    <div class="template-grid">
+                        <!-- 신규 기능 카드 -->
+                        <article class="tmpl-card">
+                            <div class="tmpl-head">
+                                <div class="tmpl-icon"><i class="fa-solid fa-sparkles fa-star-of-life"></i></div>
+                                <div class="tmpl-title">신규 기능 카드</div>
+                            </div>
+                            <p class="tmpl-desc">썸네일 + 3줄 요약 + 자세히 보기. 릴리즈 안내/가이드에 적합.</p>
+                            <div class="tmpl-meta">
+                                <span class="badge">홈</span>
+                                <span class="badge">대시보드</span>
+                                <span class="badge">CTA</span>
+                            </div>
+                            <div class="tmpl-actions">
+                                <button class="btn ghost" data-make="new-card">템플릿 생성</button>
+                                <button class="btn" data-preview="new-card">
+                    <i class="fa-regular fa-eye"></i>
+                    미리보기
+                  </button>
+                            </div>
+                        </article>
+
+                        <!-- 주간 통계 하이라이트 -->
+                        <article class="tmpl-card">
+                            <div class="tmpl-head">
+                                <div class="tmpl-icon"><i class="fa-solid fa-chart-line"></i></div>
+                                <div class="tmpl-title">주간 통계 하이라이트</div>
+                            </div>
+                            <p class="tmpl-desc">핵심 지표 3개 + 차트 이미지 스냅샷 + 요약 포인트. 자동 갱신 가능한 대시보드 링크.</p>
+                            <div class="tmpl-meta">
+                                <span class="badge">통계</span>
+                                <span class="badge">요약</span>
+                                <span class="badge">리포트</span>
+                            </div>
+                            <div class="tmpl-actions">
+                                <button class="btn ghost" data-make="weekly">템플릿 생성</button>
+                                <button class="btn" data-preview="weekly">
+                    <i class="fa-regular fa-eye"></i>
+                    미리보기
+                  </button>
+                            </div>
+                        </article>
+
+                        <!-- 안전 수칙 카드 -->
+                        <article class="tmpl-card">
+                            <div class="tmpl-head">
+                                <div class="tmpl-icon"><i class="fa-solid fa-shield-heart"></i></div>
+                                <div class="tmpl-title">안전 수칙 카드</div>
+                            </div>
+                            <p class="tmpl-desc">아이콘 + 한 줄 지침 + 자세히 보기. 야간 이동/분실물 등 접근성 ALT 카테고리 태그.</p>
+                            <div class="tmpl-meta">
+                                <span class="badge">안전</span>
+                                <span class="badge">가이드</span>
+                            </div>
+                            <div class="tmpl-actions">
+                                <button class="btn ghost" data-make="safety">템플릿 생성</button>
+                                <button class="btn" data-preview="safety">
+                    <i class="fa-regular fa-eye"></i>
+                    미리보기
+                  </button>
+                            </div>
+                        </article>
+
+                        <!-- 이벤트 안내 -->
+                        <article class="tmpl-card">
+                            <div class="tmpl-head">
+                                <div class="tmpl-icon"><i class="fa-solid fa-calendar-check"></i></div>
+                                <div class="tmpl-title">이벤트 안내</div>
+                            </div>
+                            <p class="tmpl-desc">일시/장소/신청 버튼. 설문·간담회·웨비나 공지에 활용. 예약 게시 외부 폼 연동.</p>
+                            <div class="tmpl-meta">
+                                <span class="badge">이벤트</span>
+                                <span class="badge">폼 연동</span>
+                            </div>
+                            <div class="tmpl-actions">
+                                <button class="btn ghost" data-make="event">템플릿 생성</button>
+                                <button class="btn" data-preview="event">
+                    <i class="fa-regular fa-eye"></i>
+                    미리보기
+                  </button>
+                            </div>
+                        </article>
+                    </div>
+
+                    <!-- 섹션: 최근 생성 -->
+                    <h2 class="sec-title">
+                        <i class="fa-solid fa-clock-rotate-left"></i> 최근 생성
+                    </h2>
+                    <div class="recent-wrap">
+                        <div class="recent-item">
+                            <span class="dot dot-on"></span>
+                            <div class="recent-text">
+                                <div class="title">가을 캠페인 배너</div>
+                                <div class="meta">게시중 · 2025-09-10</div>
+                            </div>
+                            <button class="btn">열기</button>
+                        </div>
+                        <div class="recent-item">
+                            <span class="dot dot-draft"></span>
+                            <div class="recent-text">
+                                <div class="title">홈 뉴스 카드 #12</div>
+                                <div class="meta">임시저장 · 2025-09-08</div>
+                            </div>
+                            <button class="btn">계속 편집</button>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+    </div>
+
+    <!-- 간단 동작 확인 (문자/기호 문제 없는 순수 JS) -->
+    <script>
+        (function() {
+            var q = document.getElementById('q');
+            var btnSearch = document.getElementById('btn-search');
+            var btnNew = document.getElementById('btn-new');
+            var btnAddTmpl = document.getElementById('btn-add-template');
+
+            if (btnSearch) {
+                btnSearch.addEventListener('click', function() {
+                    var key = q && q.value ? q.value.trim() : '';
+                    console.log('search:', key);
+                });
+            }
+            if (btnNew) {
+                btnNew.addEventListener('click', function() {
+                    console.log('new content');
+                });
+            }
+            if (btnAddTmpl) {
+                btnAddTmpl.addEventListener('click', function() {
+                    var sel = document.getElementById('templateSelect');
+                    var val = sel && sel.value ? sel.value : '';
+                    console.log('add template:', val);
+                });
+            }
+            document.querySelectorAll('[data-make]').forEach(function(el) {
+                el.addEventListener('click', function() {
+                    console.log('make with template:', el.getAttribute('data-make'));
+                });
+            });
+            document.querySelectorAll('[data-preview]').forEach(function(el) {
+                el.addEventListener('click', function() {
+                    console.log('preview template:', el.getAttribute('data-preview'));
+                });
+            });
+        })();
+    </script>
+</body>
+
+</html>

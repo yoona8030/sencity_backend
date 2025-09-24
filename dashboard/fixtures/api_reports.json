@@ -1,0 +1,35 @@
+[
+  {
+    "id": 101,
+    "animal_name": "멧돼지 출몰",
+    "report_region": "부평구",
+    "status": "처리중",
+    "report_date": "2025-09-17 12:03:00",
+    "reporter": "홍길동",
+    "admin": "관리자A",
+    "latitude": 37.5000,
+    "longitude": 126.7000
+  },
+  {
+    "id": 102,
+    "animal_name": "고라니 목격",
+    "report_region": "계양구",
+    "status": "접수",
+    "report_date": "2025-09-17 09:40:00",
+    "reporter": "김영희",
+    "admin": "관리자B",
+    "latitude": 37.5100,
+    "longitude": 126.7100
+  },
+  {
+    "id": 103,
+    "animal_name": "너구리 쓰레기봉투 훼손",
+    "report_region": "연수구",
+    "status": "접수",
+    "report_date": "2025-09-16 22:11:00",
+    "reporter": "홍길동",
+    "admin": "관리자A",
+    "latitude": 37.4800,
+    "longitude": 126.6800
+  }
+]

@@ -1,0 +1,431 @@
+/* ------------------------------
+   페이지 타이틀
+-------------------------------- */
+
+.page-contents .page-title {
+    font-size: 36px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin: 8px 0 16px;
+}
+
+
+/* ------------------------------
+   공통 카드 래퍼
+-------------------------------- */
+
+.page-contents .page-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 16px;
+    padding: 16px 18px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.05);
+}
+
+
+/* ------------------------------
+   툴바: 좌/우 정렬 + 줄바꿈 대응
+-------------------------------- */
+
+.page-contents .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 18px;
+}
+
+.page-contents .section-actions-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.page-contents .section-actions-right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+
+/* 상단 검색/필터 툴바가 좁아지면 줄바꿈되도록 */
+
+.page-contents .contents-toolbar,
+.page-contents .templates-toolbar,
+.page-contents .global-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    /* 핵심 */
+    min-width: 0;
+}
+
+.page-contents .contents-toolbar>*,
+.page-contents .templates-toolbar>*,
+.page-contents .global-toolbar>* {
+    min-width: 0;
+    max-width: 100%;
+}
+
+
+/* 검색 인풋은 가변폭, 셀렉트/버튼은 내용폭 */
+
+.page-contents .contents-toolbar .input,
+.page-contents .templates-toolbar .input {
+    flex: 1 1 260px;
+    min-width: 180px;
+    max-width: 100%;
+}
+
+.page-contents .templates-toolbar select,
+.page-contents .contents-toolbar select,
+.page-contents .templates-toolbar .btn,
+.page-contents .contents-toolbar .btn {
+    flex: 0 0 auto;
+}
+
+
+/* ------------------------------
+   레이아웃 안전장치(가로 스크롤 방지)
+-------------------------------- */
+
+.page-contents .main-content,
+.page-contents .dashboard-body {
+    min-width: 0;
+    overflow-x: hidden;
+}
+
+
+/* ------------------------------
+   카드/그리드
+-------------------------------- */
+
+
+/* 반응형 템플릿 그리드 */
+
+.page-contents .template-grid,
+.page-contents .cards-grid,
+.page-contents .cards3 {
+    display: grid;
+    gap: 16px;
+    margin-bottom: 20px;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    /* 자동 열 수 */
+}
+
+
+/* KPI/추천 등 작은 카드 묶음 */
+
+.page-contents .kpis,
+.page-contents .suggest-grid {
+    display: grid;
+    gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+
+/* 카드 자체는 폭에 맞게 줄고, 내부 요소가 넘치지 않도록 */
+
+.page-contents .card {
+    min-width: 0;
+}
+
+.page-contents .card * {
+    min-width: 0;
+}
+
+
+/* ------------------------------
+   입력/셀렉트/버튼
+-------------------------------- */
+
+.page-contents .input {
+    height: 36px;
+    padding: 0 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    background: #fff;
+    min-width: 200px;
+    max-width: 100%;
+}
+
+.page-contents .input.select,
+.page-contents select {
+    min-width: 180px;
+    max-width: 100%;
+}
+
+.page-contents .btn {
+    height: 36px;
+    padding: 0 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    background: #f9fafb;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.page-contents .btn.primary {
+    background: #111827;
+    color: #fff;
+    border-color: #111827;
+}
+
+.page-contents .btn.ghost {
+    background: #fff;
+    border-color: #e5e7eb;
+}
+
+
+/* ------------------------------
+   이미지/썸네일
+-------------------------------- */
+
+.page-contents img,
+.page-contents .thumb,
+.page-contents .preview {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    object-fit: cover;
+    border-radius: 12px;
+}
+
+
+/* ------------------------------
+   섹션 타이틀
+-------------------------------- */
+
+.page-contents .sec-title {
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    margin: 4px 2px 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #111827;
+}
+
+
+/* ------------------------------
+   템플릿 카드(타일)
+-------------------------------- */
+
+.page-contents .tmpl-card {
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    background: #fff;
+    padding: 18px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
+    transition: box-shadow 0.15s ease, transform 0.15s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.page-contents .tmpl-card:hover {
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.08);
+    transform: translateY(-2px);
+}
+
+.page-contents .tmpl-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.page-contents .tmpl-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 9999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    background: #f3f4f6;
+    color: #374151;
+    border: 1px solid #e5e7eb;
+}
+
+.page-contents .tmpl-title {
+    font-size: 18px;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+}
+
+.page-contents .tmpl-desc {
+    font-size: 14px;
+    color: #374151;
+    line-height: 1.5;
+}
+
+.page-contents .tmpl-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.page-contents .badge {
+    display: inline-block;
+    padding: 5px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    line-height: 1;
+    background: #f3f4f6;
+    color: #374151;
+}
+
+.page-contents .tmpl-actions {
+    margin-top: 6px;
+    display: flex;
+    gap: 8px;
+}
+
+
+/* ------------------------------
+   최근 생성 리스트
+-------------------------------- */
+
+.page-contents .recent-wrap {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(220px, 1fr));
+    gap: 10px;
+}
+
+.page-contents .recent-item {
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #fff;
+}
+
+.page-contents .recent-text .title {
+    font-weight: 700;
+    font-size: 14px;
+}
+
+.page-contents .recent-text .meta {
+    font-size: 12px;
+    color: #6b7280;
+}
+
+.page-contents .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.page-contents .dot-on {
+    background: #22c55e;
+}
+
+.page-contents .dot-draft {
+    background: #f59e0b;
+}
+
+
+/* ------------------------------
+   우측 세로 버튼(템플릿 추가 등)과 겹침 방지
+   - 실제 요소 클래스: .templates-rail | .right-rail | .fab-rail 중 하나일 것
+-------------------------------- */
+
+.page-contents {
+    --rail-w: 56px;
+}
+
+
+/* 세로 버튼 대략 폭 */
+
+.page-contents .templates-rail,
+.page-contents .right-rail,
+.page-contents .fab-rail {
+    position: fixed;
+    right: 16px;
+    top: 180px;
+    z-index: 5;
+    writing-mode: vertical-rl;
+    /* 데스크톱에서 세로 글자 */
+    text-orientation: mixed;
+}
+
+
+/* 툴바가 세로 버튼과 겹치지 않게 우측 여백 확보 */
+
+.page-contents .section-header,
+.page-contents .templates-toolbar,
+.page-contents .contents-toolbar,
+.page-contents .global-toolbar {
+    padding-right: var(--rail-w);
+}
+
+
+/* ------------------------------
+   반응형 보정
+-------------------------------- */
+
+@media (max-width: 1024px) {
+    .page-contents .dashboard-body {
+        padding-left: var(--page-pad-x);
+        padding-right: var(--page-pad-x);
+    }
+}
+
+@media (max-width: 960px) {
+    .page-contents .recent-wrap {
+        grid-template-columns: 1fr;
+    }
+}
+
+
+/* 좁아지면 세로 버튼을 가로/아래로 내려 겹침 해제 */
+
+@media (max-width: 1280px) {
+    .page-contents .section-header,
+    .page-contents .templates-toolbar,
+    .page-contents .contents-toolbar,
+    .page-contents .global-toolbar {
+        padding-right: 0;
+        /* 우측 여백 제거 */
+    }
+    .page-contents .templates-rail,
+    .page-contents .right-rail,
+    .page-contents .fab-rail {
+        position: static;
+        /* 문서 흐름으로 */
+        writing-mode: horizontal-tb;
+        /* 가로 글자 */
+        text-orientation: initial;
+        margin-left: auto;
+        /* 우측 정렬 */
+        display: inline-flex;
+        gap: 8px;
+    }
+}
+
+@media (max-width: 640px) {
+    .page-contents .section-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .page-contents .section-actions-right {
+        margin-left: 0;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+    /* 필요하면 아주 작은 화면에서 버튼 숨기기
+  .page-contents .templates-rail,
+  .page-contents .right-rail,
+  .page-contents .fab-rail { display: none; }
+  */
+}

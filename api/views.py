@@ -1,14 +1,14 @@
 import requests, ipaddress, socket
 from typing import Optional
 from urllib.parse import urlparse, urlencode
-from datetime import datetime
-# 예: Pillow로 로드 → 모델 추론 → 최고 확률 레이블 매핑
+from datetime import datetime, date, timedelta
 from PIL import Image
-from .ml import predict_topk, predict_topk_grouped  # 이전에 보여준 예시 유틸
 
-from django.contrib.auth import get_user_model
+from django.contrib.auth import get_user_model, authenticate
+from django.contrib.auth.decorators import login_required
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 from django.conf import settings
@@ -32,6 +32,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 
+from .ml import predict_topk, predict_topk_grouped  # 모델 유틸
 from .utils import is_admin
 from .models import (
     User, Animal, SearchHistory, Location, Report, Notification,
@@ -44,24 +45,40 @@ from .serializers import (
     NotificationSerializer, FeedbackSerializer,
     StatisticSerializer, SavedPlaceCreateSerializer, SavedPlaceReadSerializer,
     AdminSerializer, ProfileSerializer,
-    UserProfileSerializer
+    UserProfileSerializer,
+    ReportNoAuthCreateSerializer,
 )
 from .filters import ReportFilter, NotificationFilter
 
-
 User = get_user_model()
 
-# ------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────
+# 공용 헬퍼: 동물 표시용 이름 필드 선택(name_kor -> name)
+# ─────────────────────────────────────────────────────────────
+def _animal_name_field(report_model) -> Optional[str]:
+    """
+    Report.animal FK가 가리키는 Animal 모델에서 표시용 이름 필드를 선택.
+    우선순위: name_kor → name → (없으면 None)
+    반환 예: 'animal__name_kor' / 'animal__name' / None
+    """
+    animal_model = report_model._meta.get_field('animal').remote_field.model
+    field_names = {f.name for f in animal_model._meta.get_fields()}
+    if 'name_kor' in field_names:
+        return 'animal__name_kor'
+    if 'name' in field_names:
+        return 'animal__name'
+    return None
+
+# ─────────────────────────────────────────────────────────────
 # Permissions
-# ------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────
 class IsAdminOrReadGroup(permissions.BasePermission):
     """
     SAFE_METHODS:
-      - ?type=group 쿼리로 목록 조회 → 비로그인 허용
-      - 그 외 SAFE 조회는 로그인 필요
-      - 객체 조회 시: group 은 누구나, individual 은 관리자 또는 본인만
-    비SAFE(POST/PUT/PATCH/DELETE):
-      - 관리자만
+      - ?type=group 목록 조회 → 비로그인 허용
+      - 그 외 SAFE 조회 → 로그인 필요
+      - 객체 조회: group 누구나 / individual 은 관리자 또는 본인
+    비-SAFE: 관리자만
     """
     def has_permission(self, request, view):
         if request.method in permissions.SAFE_METHODS:
@@ -81,30 +98,18 @@ class IsAdminOrReadGroup(permissions.BasePermission):
         return bool(request.user and request.user.is_authenticated and is_admin(request.user))
 
 
-# 선택적으로 사용: /notifications/?type=group 익명 허용 예시
 class IsAuthenticatedOrReadGroup(permissions.BasePermission):
-    """
-    - /notifications/?type=group → 로그인 안 해도 읽기 허용 (원하면 막아도 됨)
-    - 그 외(개인 공지/피드백) → 인증 필요
-    """
+    """ /notifications/?type=group → 익명 허용, 그 외 → 인증 필요 """
     def has_permission(self, request: Request, view) -> bool:
         qtype = request.query_params.get("type", "").lower()
         if qtype == "group" and request.method in permissions.SAFE_METHODS:
             return True
         return bool(request.user and request.user.is_authenticated)
 
-
-# ------------------------------------------------------------
-# Utilities for Notification
-# ------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────
+# Notification 유틸
+# ─────────────────────────────────────────────────────────────
 def _resolve_admin_from_request_or_feedback(request, fb) -> Optional[Admin]:
-    """
-    알림의 admin 컬럼 채우기:
-    - fb.admin 이 Admin이면 그대로
-    - fb.admin 이 User이면 그 User.admin
-    - 없으면, 요청 주체가 관리자면 request.user.admin
-    - 그래도 없으면 None
-    """
     a = getattr(fb, "admin", None) if fb is not None else None
     if a is not None:
         if isinstance(a, Admin):
@@ -118,13 +123,9 @@ def _upsert_notification_for_report(
     *, report: Report, reply: Optional[str], status_change: Optional[str], admin_obj: Optional[Admin]
 ) -> Notification:
     """
-    보고서 하나당 개인 알림 1건 유지(업서트).
-    - 있으면 update(필드 채워지면 덮어쓰기)
-    - 없으면 create
-    - Notification에 report FK 유무 감지
+    보고서별 개인 알림 1건 유지(업서트)
     """
     has_report_fk = any(f.name == "report" for f in Notification._meta.get_fields())
-
     base = Notification.objects.filter(type='individual', user_id=report.user_id)
     if has_report_fk:
         base = base.filter(report_id=report.id)
@@ -158,10 +159,9 @@ def _upsert_notification_for_report(
             payload['report_id'] = report.id
         return Notification.objects.create(**payload)
 
-
-# ------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────
 # Auth
-# ------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────
 class SignUpView(APIView):
     permission_classes = [AllowAny]
 
@@ -203,7 +203,7 @@ class LoginView(APIView):
         refresh = RefreshToken.for_user(user)
         return Response({
             'success': True,
-            'token': str(refresh.access_token),
+            'access':  str(refresh.access_token),
             'refresh': str(refresh),
             'username': user.username,
             'email': user.email,
@@ -212,17 +212,13 @@ class LoginView(APIView):
 
 
 class UserViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    관리자 전용: 전체 사용자 조회/상세
-    """
     queryset = User.objects.all()
     serializer_class = UserSerializer
     permission_classes = [IsAdminUser]
 
-
-# ------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────
 # Image Proxy (SSRF 보호)
-# ------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────
 ALLOWED_SCHEMES = {"http", "https"}
 ALLOWED_HOSTS_FOR_PROXY = {
     'i.namu.wiki',
@@ -245,7 +241,6 @@ def _is_private_host(hostname: str) -> bool:
             or ip_obj.is_multicast
         )
     except Exception:
-        # DNS 실패 등은 안전하게 막음
         return True
 
 
@@ -290,21 +285,15 @@ def proxy_image_view(request):
     resp["Cache-Control"] = "public, max-age=86400"
     return resp
 
-
-# ------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────
 # Domain APIs
-# ------------------------------------------------------------
+# ─────────────────────────────────────────────────────────────
 class SearchHistoryViewSet(
     mixins.ListModelMixin,
     mixins.CreateModelMixin,
     mixins.DestroyModelMixin,
     viewsets.GenericViewSet
 ):
-    """
-    GET    /search-history/        → 로그인 유저 자신의 검색 기록 조회
-    POST   /search-history/        → 로그인 유저 자신의 검색 기록 생성
-    DELETE /search-history/{pk}/   → 해당 기록 삭제
-    """
     queryset = SearchHistory.objects.all()
     serializer_class = SearchHistorySerializer
     authentication_classes = [JWTAuthentication]
@@ -316,17 +305,27 @@ class SearchHistoryViewSet(
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
-
+# 동물 통계: 상위 4 + 기타 (별칭 사용)
 def animal_stats(request):
-    rows = (
-        Report.objects.values('animal__name_kor')
-        .annotate(count=Count('id'))
-        .order_by('-count')
-    )
-    full = [
-        {'animal': (r['animal__name_kor'] or '미상'), 'count': r['count']}
-        for r in rows
-    ]
+    name_field = _animal_name_field(Report)  # 'animal__name_kor' | 'animal__name' | None
+
+    if name_field:
+        rows_qs = (
+            Report.objects
+            .values(animal_label=F(name_field))
+            .annotate(count=Count('id'))
+            .order_by('-count')
+        )
+        full = [{'animal': (r['animal_label'] or '미상'), 'count': r['count']} for r in rows_qs]
+    else:
+        rows_qs = (
+            Report.objects
+            .values('animal_id')
+            .annotate(count=Count('id'))
+            .order_by('-count')
+        )
+        full = [{'animal': '미상', 'count': r['count']} for r in rows_qs]
+
     full.sort(key=lambda x: x['count'], reverse=True)
 
     etc_from_db = next((x for x in full if x['animal'] == '기타'), None)
@@ -345,36 +344,62 @@ def animal_stats(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def animal_stats_raw(request):
-    rows = (
-        Report.objects.values('animal__name_kor')
-        .annotate(count=Count('id'))
-        .order_by('-count')
-    )
-    data = [{'animal': r['animal__name_kor'] or '미상', 'count': r['count']} for r in rows]
+    name_field = _animal_name_field(Report)
+
+    if name_field:
+        rows = (
+            Report.objects
+            .values(animal_label=F(name_field))
+            .annotate(count=Count('id'))
+            .order_by('-count')
+        )
+        data = [{'animal': (r['animal_label'] or '미상'), 'count': r['count']} for r in rows]
+    else:
+        rows = (
+            Report.objects
+            .values('animal_id')
+            .annotate(count=Count('id'))
+            .order_by('-count')
+        )
+        data = [{'animal': '미상', 'count': r['count']} for r in rows]
+
     return Response(data)
 
 
 def region_by_animal_stats(request):
-    stats = (
-        Report.objects.values("location__city", "animal__name_kor")
-        .annotate(count=Count("id"))
-        .order_by("location__city")
-    )
-    result = [
-        {
-            "city": s["location__city"],
-            "animal": s["animal__name_kor"],
-            "count": s["count"],
-        }
-        for s in stats
-    ]
+    """
+    Location × Animal 교차 통계. 동물명은 별칭으로 안전하게 반환.
+    """
+    base_field = _animal_name_field(Report)  # e.g. 'animal__name_kor'
+    if base_field:
+        after = base_field.split('__', 1)[1]  # 'name_kor' or 'name'
+        animal_key = f"reports__animal__{after}"
+        stats = (
+            Location.objects
+            .values('city', animal_label=F(animal_key))
+            .annotate(count=Count('reports__id'))
+            .order_by('city')
+        )
+        result = [
+            {"city": r["city"], "animal": (r["animal_label"] or "미상"), "count": r["count"]}
+            for r in stats
+        ]
+    else:
+        stats = (
+            Location.objects
+            .values('city')
+            .annotate(count=Count('reports__id'))
+            .order_by('city')
+        )
+        result = [
+            {"city": r["city"], "animal": "미상", "count": r["count"]}
+            for r in stats
+        ]
+
     return JsonResponse(result, safe=False)
 
 
 class AnimalViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    모든 사용자: 동물 목록/상세 조회
-    """
     queryset = Animal.objects.all()
     serializer_class = AnimalSerializer
     permission_classes = [AllowAny]
@@ -390,9 +415,6 @@ class AnimalViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class LocationViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    위치 목록/상세 조회
-    """
     queryset = (
         Location.objects
         .prefetch_related('reports', 'reports__user')
@@ -418,7 +440,6 @@ class SavedPlaceViewSet(viewsets.ModelViewSet):
         return base if u.is_superuser else base.filter(user=u)
 
     def get_serializer_class(self):
-        # 생성 때만 CreateSerializer, 나머지는 ReadSerializer
         return SavedPlaceCreateSerializer if self.action == 'create' else SavedPlaceReadSerializer
 
     def perform_create(self, serializer):
@@ -433,8 +454,8 @@ class ReportViewSet(mixins.ListModelMixin,
                     viewsets.GenericViewSet):
     """
     신고 CRUD
-    - 일반 사용자: 본인 신고만 조회/수정 가능
-    - 관리자: 모든 신고 조회/수정 가능
+    - 일반 사용자: 본인 신고만
+    - 관리자: 전체
     """
     queryset = Report.objects.select_related('animal', 'user', 'location').all()
     serializer_class = ReportSerializer
@@ -449,18 +470,12 @@ class ReportViewSet(mixins.ListModelMixin,
     def get_queryset(self):
         user = self.request.user
         qs = Report.objects.select_related('animal', 'user', 'location')
-        if user.is_superuser:
-            return qs
-        return qs.filter(user=user)
+        return qs if user.is_superuser else qs.filter(user=user)
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
     def perform_update(self, serializer):
-        """
-        상태 변경 시에도 같은 키(보고서)로 Notification을 '업서트'만 한다.
-        → Feedback에서 만든 알림과 절대 중복되지 않음.
-        """
         instance: Report = self.get_object()
         old_status = instance.status
         with transaction.atomic():
@@ -486,7 +501,6 @@ class ReportViewSet(mixins.ListModelMixin,
             try:
                 start = datetime.strptime(from_date, "%Y-%m-%d").date()
                 end   = datetime.strptime(to_date,   "%Y-%m-%d").date()
-                # report_date 필드 타입에 맞게 자동 선택
                 field = Report._meta.get_field('report_date')
                 if isinstance(field, DateTimeField):
                     queryset = queryset.filter(
@@ -509,14 +523,20 @@ class ReportViewSet(mixins.ListModelMixin,
         serializer = self.get_serializer(queryset, many=True)
         return Response(serializer.data)
 
-    # ===== 기존 요약 통계 =====
+    # ===== 기존 요약 통계 (별칭 사용) =====
     @action(detail=False, methods=['get'], url_path='stats')
     def stats(self, request):
         qs = self.filter_queryset(self.get_queryset())
         total = qs.count()
 
+        name_field = _animal_name_field(Report)
+        if name_field:
+            by_animal_rows = qs.values(animal_label=F(name_field)).annotate(c=Count('id'))
+            by_animal = { (r['animal_label'] or '미상'): r['c'] for r in by_animal_rows }
+        else:
+            by_animal = {'미상': total} if total else {}
+
         by_status = dict(qs.values_list('status').annotate(c=Count('id')))
-        by_animal = dict(qs.values_list('animal__name_kor').annotate(c=Count('id')))
 
         lqs = Location.objects.filter(id__in=qs.values('location_id'))
         area_expr = Case(
@@ -525,51 +545,51 @@ class ReportViewSet(mixins.ListModelMixin,
             default=Value('미상'),
             output_field=CharField(),
         )
-
         rows = (
             lqs.annotate(area=area_expr)
             .values('area')
             .annotate(c=Count('id'))
             .order_by('-c')
         )
-
         by_region = {r['area']: r['c'] for r in rows}
 
-        data = {
+        return Response({
             'total': total,
             'by_status': by_status,
             'by_animal': by_animal,
             'by_region': by_region,
-        }
-        return Response(data)
+        })
 
-    # ===== 동물별 신고 건수 (도넛) =====
+    # ===== 동물별 신고 건수 (도넛) - 별칭 사용 =====
     @action(detail=False, methods=['get'], url_path='stats/animal')
     def stats_animal(self, request):
         qs = self.filter_queryset(self.get_queryset())
-        rows = (
-            qs.values('animal__name_kor')
-              .annotate(count=Count('id'))
-              .order_by('-count')
-        )
+        name_field = _animal_name_field(Report)
 
-        top4 = rows[:4]
-        top_animals = [r['animal__name_kor'] or '미상' for r in top4]
-        etc_count = sum(
-            r['count'] for r in rows
-            if (r['animal__name_kor'] or '미상') not in top_animals
-        )
+        if name_field:
+            rows = (
+                qs.values(animal_label=F(name_field))
+                  .annotate(count=Count('id'))
+                  .order_by('-count')
+            )
+            rows_list = [{'animal': (r['animal_label'] or '미상'), 'count': r['count']} for r in rows]
+        else:
+            rows = (
+                qs.values('animal_id')
+                  .annotate(count=Count('id'))
+                  .order_by('-count')
+            )
+            rows_list = [{'animal': '미상', 'count': r['count']} for r in rows]
 
-        data = [
-            {'animal': r['animal__name_kor'] or '미상', 'count': r['count']}
-            for r in top4
-        ]
-        if etc_count > 0:
-            data.append({'animal': '기타', 'count': etc_count})
+        rows_list.sort(key=lambda x: x['count'], reverse=True)
+        top4 = rows_list[:4]
+        top_animals = [x['animal'] for x in top4]
 
+        etc_count = sum(x['count'] for x in rows_list[4:])
+        data = top4 + ([{'animal': '기타', 'count': etc_count}] if etc_count > 0 else [])
         return Response({"top_animals": top_animals, "data": data})
 
-    # ===== 지역 × 동물별 신고 건수 (스택 바) =====
+    # ===== 지역 × 동물별 신고 건수 (스택 바) - 별칭 사용 =====
     @action(detail=False, methods=['get'], url_path='stats/region-by-animal')
     def stats_region_by_animal(self, request):
         """
@@ -579,30 +599,48 @@ class ReportViewSet(mixins.ListModelMixin,
         qs  = self.filter_queryset(self.get_queryset())
         lqs = Location.objects.filter(id__in=qs.values('location_id'))
 
-        rows = (
-            lqs.values('city', 'reports__animal__name_kor')
-               .annotate(count=Count('reports__id'))
-               .order_by('city', '-count')
-        )
+        base_field = _animal_name_field(Report)
+        if base_field:
+            after = base_field.split('__', 1)[1]
+            animal_field = f"reports__animal__{after}"
+            rows = (
+                lqs.values('city', animal_label=F(animal_field))
+                   .annotate(count=Count('reports__id'))
+                   .order_by('city', '-count')
+            )
+            norm_rows = [{
+                "city": (r['city'] or '미상'),
+                "animal": (r['animal_label'] or '미상'),
+                "count": r['count']
+            } for r in rows]
+        else:
+            rows = (
+                lqs.values('city')
+                   .annotate(count=Count('reports__id'))
+                   .order_by('city', '-count')
+            )
+            norm_rows = [{
+                "city": (r['city'] or '미상'),
+                "animal": '미상',
+                "count": r['count']
+            } for r in rows]
 
+        # 상위 4개 도시 + 기타 합치기 로직
         city_totals = {}
-        for r in rows:
-            city = r['city'] or '미상'
-            city_totals[city] = city_totals.get(city, 0) + r['count']
-
-        top4_cities = sorted(city_totals.items(), key=lambda x: x[1], reverse=True)[:4]
-        top4_names  = [r[0] for r in top4_cities]
+        for r in norm_rows:
+            c = r['city']
+            city_totals[c] = city_totals.get(c, 0) + r['count']
+        top4_names = [name for name, _cnt in sorted(city_totals.items(), key=lambda x: x[1], reverse=True)[:4]]
 
         data = []
         etc_city_animals = {}
-
-        for city in set((r['city'] or '미상') for r in rows):
-            city_rows = [r for r in rows if (r['city'] or '미상') == city]
-
+        cities = sorted(set(r['city'] for r in norm_rows))
+        for city in cities:
+            city_rows = [r for r in norm_rows if r['city'] == city]
             animal_counts = {}
             for r in city_rows:
-                animal = r['reports__animal__name_kor'] or '미상'
-                animal_counts[animal] = animal_counts.get(animal, 0) + r['count']
+                a = r['animal']
+                animal_counts[a] = animal_counts.get(a, 0) + r['count']
 
             sorted_animals = sorted(animal_counts.items(), key=lambda x: x[1], reverse=True)
             top4_animals   = sorted_animals[:4]
@@ -624,38 +662,20 @@ class ReportViewSet(mixins.ListModelMixin,
             data.append({"city": "기타", "animal": animal, "count": cnt})
 
         return Response(data)
-    
-    # 홈 카드용 요약
+
+    # ===== 홈 카드용 요약 =====
     @action(detail=False, methods=['get'], url_path='summary')
     def summary(self, request):
         """
-        홈 카드용 요약
         GET /api/reports/summary/?scope=global|me&period=all|7d|30d
-        응답:
-        {
-          "total_reports": 16,
-          "top_animal": {"id": 3, "name": "고라니", "count": 8} | null,
-          "last_report_date": "2025-08-05T06:08:00Z" | null
-        }
         """
         scope  = (request.query_params.get('scope') or 'global').lower()
         period = (request.query_params.get('period') or 'all').lower()
 
-        # ① 기본 쿼리셋(전역 기준)
         base = Report.objects.select_related('animal').all()
-
-        # ② 범위: me면 본인 것만(관리자라도 me면 본인 기준)
         if scope == 'me':
             base = base.filter(user=request.user)
-        else:
-            # scope != me인 경우:
-            # - 일반사용자도 전체(전역) 통계를 보게 하려면 그대로 두고
-            # - 만약 일반사용자는 전역을 못 보게 하려면 아래 주석 해제:
-            # if not request.user.is_superuser:
-            #     return Response({"detail": "권한이 없습니다."}, status=403)
-            pass
 
-        # ③ 기간 필터
         now = timezone.now()
         if period == '7d':
             start = now - timezone.timedelta(days=7)
@@ -665,33 +685,45 @@ class ReportViewSet(mixins.ListModelMixin,
             start = None
 
         if start is not None:
-            # report_date 타입(날짜/일시)에 따라 자동 처리
             field = Report._meta.get_field('report_date')
             if isinstance(field, DateTimeField):
                 base = base.filter(report_date__gte=start)
             else:
                 base = base.filter(report_date__gte=start.date())
 
-        # ④ 총 신고 수
         total_reports = base.count()
-
-        # ⑤ 마지막 신고일
         last_dt = base.aggregate(last=Max('report_date'))['last']
 
-        # ⑥ 가장 많이 신고된 동물
-        top_row = (
-            base.values('animal_id', 'animal__name_kor')
-                .annotate(cnt=Count('id'))
-                .order_by('-cnt')
-                .first()
-        )
-        top_animal = None
-        if top_row:
-            top_animal = {
-                "id":   top_row['animal_id'],
-                "name": top_row['animal__name_kor'] or '미상',
-                "count": top_row['cnt'],
-            }
+        name_field = _animal_name_field(base.model)  # 'animal__name_kor' | 'animal__name' | None
+
+        if name_field:
+            top_row = (
+                base.values('animal_id', animal_label=F(name_field))
+                    .annotate(cnt=Count('id'))
+                    .order_by('-cnt')
+                    .first()
+            )
+            top_animal = None
+            if top_row:
+                top_animal = {
+                    "id":   top_row['animal_id'],
+                    "name": top_row['animal_label'] or '미상',
+                    "count": top_row['cnt'],
+                }
+        else:
+            top_row = (
+                base.values('animal_id')
+                    .annotate(cnt=Count('id'))
+                    .order_by('-cnt')
+                    .first()
+            )
+            top_animal = None
+            if top_row:
+                top_animal = {
+                    "id":   top_row['animal_id'],
+                    "name": '미상',
+                    "count": top_row['cnt'],
+                }
 
         return Response({
             "total_reports": total_reports,
@@ -732,23 +764,16 @@ class ReverseGeocodeView(APIView):
         except Exception as e:
             return Response({'detail': str(e)}, status=502)
 
-
 # ---------- AI 인식(더미) ----------
-# --- api/views.py: RecognizeAnimalView 교체 ---
 class RecognizeAnimalView(APIView):
     permission_classes = [AllowAny]
     parser_classes = [MultiPartParser, FormParser]
 
-    # 모델 라벨(영문) -> DB의 name_eng 키 & 한국어 표기(옵션)
-    # ※ 고라니를 DB에서 'goat'로 쓰는 현 상태를 반영
     _ALIAS_EN = {
-        # 철자 변형까지 흡수
         "water deer": "goat",
         "water-deer": "goat",
-        "water dear": "goat",   # 잘못된 라벨도 방어
+        "water dear": "goat",
         "roe deer": "roe deer",
-
-        # 백로/왜가리 계열
         "great egret": "egret",
         "intermediate egret": "egret",
         "little egret": "egret",
@@ -756,14 +781,10 @@ class RecognizeAnimalView(APIView):
         "grey heron": "heron",
         "gray heron": "heron",
         "heron": "heron",
-
-        # 다람쥐/청설모 계열
         "korean squirrel": "squirrel",
         "eurasian red squirrel": "squirrel",
         "squirrel": "squirrel",
         "chipmunk": "chipmunk",
-
-        # 기타 예시(필요 시 계속 보강)
         "wild boar": "wild boar",
         "raccoon": "raccoon",
         "black bear": "black bear",
@@ -787,7 +808,6 @@ class RecognizeAnimalView(APIView):
         "black bear": "반달가슴곰",
     }
 
-    # 그룹 표기(한국어)
     _GROUP_LABEL_KO = {
         "deer": "고라니/노루",
         "egret_heron": "중대백로/왜가리",
@@ -796,17 +816,14 @@ class RecognizeAnimalView(APIView):
 
     @classmethod
     def _norm_eng(cls, label_en: str) -> str:
-        """모델 라벨 영문을 DB의 name_eng 키로 정규화."""
         k = (label_en or "").strip().lower()
         return cls._ALIAS_EN.get(k, k)
 
     @classmethod
-    def _to_kor(cls, db_key_en: str) -> str | None:
-        """DB 영문 키를 한국어 표기로(있으면) 변환."""
+    def _to_kor(cls, db_key_en: str) -> Optional[str]:
         return cls._ALIAS_KO.get(db_key_en)
 
-    def _find_animal(self, rep_eng: str, display_ko: str | None):
-        """DB에서 대표 영문/한국어로 Animal 1건 조회."""
+    def _find_animal(self, rep_eng: str, display_ko: Optional[str]):
         qs = Animal.objects.all()
         q = Q(name_eng__iexact=rep_eng)
         if display_ko:
@@ -821,57 +838,49 @@ class RecognizeAnimalView(APIView):
         img = Image.open(f)
         grouped = (request.query_params.get("grouped") in ("1", "true", "yes"))
 
-        # ============== 그룹 모드 ==============
         if grouped:
-            topg = predict_topk_grouped(img, k=3)  # [{group,label_ko,prob,members:[(en,prob),...]}, ...]
+            topg = predict_topk_grouped(img, k=3)
             results = []
-
             for g in topg:
-                # 대표 멤버(그룹 내 1순위)
                 top_member_en = g["members"][0][0]
-                rep_eng = self._norm_eng(top_member_en)          # DB 키로 정규화
+                rep_eng = self._norm_eng(top_member_en)
                 ko_from_key = self._to_kor(rep_eng)
 
-                # 화면 표기(그룹이면 고정 그룹명, 아니면 구성원 한글/영문)
                 if g.get("label_ko"):
                     display = self._GROUP_LABEL_KO.get(g["group"], g["label_ko"])
                 else:
-                    display = ko_from_key or top_member_en  # 단일종이면 한글 있으면 한글, 없으면 영문
+                    display = ko_from_key or top_member_en
 
                 a = self._find_animal(rep_eng, display)
 
                 results.append({
                     "group": g["group"],
-                    "label": display,          # 최종 화면 표기
+                    "label": display,
                     "prob": g["prob"],
-                    "members": g["members"],   # [(영문라벨, 확률), ...]
-                    "rep_eng": rep_eng,        # DB 조회에 사용한 표준 영문 키
+                    "members": g["members"],
+                    "rep_eng": rep_eng,
                     "animal_id": a.id if a else None,
                 })
 
             return Response({"mode": "grouped", "results": results})
 
-        # ============== 단일 모드 ==============
-        topk = predict_topk(img, k=3)            # [{'label':en,'prob':...}, ...]
+        topk = predict_topk(img, k=3)
         best = topk[0]
-        rep_eng = self._norm_eng(best["label"])  # DB 키 정규화
+        rep_eng = self._norm_eng(best["label"])
         label_ko = self._to_kor(rep_eng)
-
         a = self._find_animal(rep_eng, label_ko)
 
         return Response({
             "mode": "single",
-            "label": best["label"],          # 모델 원문 라벨(영문)
-            "label_norm": rep_eng,           # DB 정규화 키(영문)
-            "label_ko": label_ko,            # 한국어 표기(있으면)
+            "label": best["label"],
+            "label_norm": rep_eng,
+            "label_ko": label_ko,
             "prob": best["prob"],
             "animal_id": a.id if a else None,
             "topk": topk,
         })
 
 # ---------- 무인증 신고 ----------
-from .serializers import ReportNoAuthCreateSerializer
-
 class ReportNoAuthView(APIView):
     """
     multipart: photo, animalId, [locationId | lat,lng], status
@@ -889,16 +898,16 @@ class ReportNoAuthView(APIView):
             'animal': getattr(rpt.animal, 'name_kor', None),
             'created_at': rpt.report_date,
         }, status=201)
-    
+
+# ─────────────────────────────────────────────────────────────
+# Notification
+# ─────────────────────────────────────────────────────────────
 class NotificationViewSet(mixins.ListModelMixin,
                           mixins.CreateModelMixin,
                           mixins.RetrieveModelMixin,
                           mixins.UpdateModelMixin,
                           mixins.DestroyModelMixin,
                           viewsets.GenericViewSet):
-    """
-    Notification CRUD + 그룹 전송 기능
-    """
     queryset = (Notification.objects
                 .select_related('user', 'admin', 'report', 'report__animal', 'report__user')
                 .all())
@@ -918,11 +927,9 @@ class NotificationViewSet(mixins.ListModelMixin,
         qtype = (self.request.query_params.get('type') or '').strip().lower()
         user  = self.request.user
 
-        # ① 그룹 공지: 언제나 group만
         if qtype == 'group':
             return qs.filter(type='group').order_by('-created_at', '-id')
 
-        # ② 개인 알림: 인증 필수 + individual만
         if qtype == 'individual':
             if not (user and user.is_authenticated):
                 return qs.none()
@@ -934,7 +941,6 @@ class NotificationViewSet(mixins.ListModelMixin,
                 return base.order_by('-created_at', '-id')
             return qs.filter(type='individual', user_id=user.id).order_by('-created_at', '-id')
 
-        # ③ type 누락 시 섞임 방지 → 빈 결과
         return qs.none()
 
     def list(self, request, *args, **kwargs):
@@ -973,7 +979,6 @@ class NotificationViewSet(mixins.ListModelMixin,
     @action(detail=False, methods=['post'], url_path='send-group', permission_classes=[IsAdminUser])
     def send_group(self, request):
         """
-        그룹 공지 생성 (특정 유저 목록 or 전체 공지)
         body:
         {
           "user_ids": [12, 34],   # 없으면 전체 공지
@@ -1003,9 +1008,8 @@ class NotificationViewSet(mixins.ListModelMixin,
             )
             return Response({'created': 1}, status=status.HTTP_201_CREATED)
 
-        from django.contrib.auth import get_user_model
         UserModel = get_user_model()
-        users = UserModel.objects.filter(id__in=user_ids, admin__isnull=True)  # 관리자 계정 제외
+        users = UserModel.objects.filter(id__in=user_ids, admin__isnull=True)  # 관리자 제외
         to_create = [
             Notification(
                 type='individual', user=u,
@@ -1017,16 +1021,13 @@ class NotificationViewSet(mixins.ListModelMixin,
         return Response({'created': len(to_create)}, status=status.HTTP_201_CREATED)
 
 class FeedbackViewSet(viewsets.ModelViewSet):
-    """
-    피드백 조회/등록 (관리자: 전체 / 일반 사용자: 본인 것만)
-    """
     queryset = Feedback.objects.select_related('report', 'user', 'admin').all()
     serializer_class = FeedbackSerializer
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
 
     filter_backends = [DjangoFilterBackend, OrderingFilter]
-    filterset_fields = ['report', 'user', 'admin']  # FK 표준 필터
+    filterset_fields = ['report', 'user', 'admin']
     ordering_fields = ['feedback_datetime', 'feedback_id']
     ordering = ['-feedback_datetime']
 
@@ -1034,11 +1035,9 @@ class FeedbackViewSet(viewsets.ModelViewSet):
         qs = super().get_queryset()
         u = self.request.user
 
-        # 일반 사용자: 내가 신고자(user)인 것만
         if not is_admin(u):
             qs = qs.filter(user_id=u.id)
         else:
-            # 관리자: 전체. ?scope=mine → 내가 reporter이거나 내가 속한 admin이 담당인 것
             scope = (self.request.query_params.get('scope') or '').lower()
             if scope in ('mine', 'me', 'my'):
                 qs = qs.filter(Q(user_id=u.id) | Q(admin__user_id=u.id))
@@ -1059,26 +1058,20 @@ class FeedbackViewSet(viewsets.ModelViewSet):
 
             _upsert_notification_for_report(
                 report=rpt,
-                reply=(fb.content or ""),   # ← 피드백 내용을 바로 저장
+                reply=(fb.content or ""),
                 status_change=None,
                 admin_obj=admin_obj,
             )
-
 
 def my_notifications_qs(request):
     return (Feedback.objects
             .filter(Q(user_id=request.user.id) | Q(admin__user_id=request.user.id))
             .order_by('-feedback_datetime', '-feedback_id'))
 
-
 class StatisticViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    통계 조회
-    """
     queryset = Statistic.objects.all().order_by('-state_year', '-state_month')
     serializer_class = StatisticSerializer
     permission_classes = [IsAuthenticated]
-
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
@@ -1091,7 +1084,6 @@ def animal_info(request):
     if request.user and request.user.is_authenticated:
         SearchHistory.objects.create(user=request.user, keyword=name)
 
-    # features를 리스트로 표준화
     feats = getattr(a, "features", None)
     if isinstance(feats, list):
         features = feats
@@ -1100,7 +1092,6 @@ def animal_info(request):
     else:
         features = []
 
-    # 프록시 이미지 URL 구성
     proxied = None
     if getattr(a, "image_url", None):
         q = urlencode({'url': a.image_url})
@@ -1118,20 +1109,15 @@ def animal_info(request):
         "description": getattr(a, "description", None),
     })
 
-
 class AdminViewSet(mixins.ListModelMixin,
                    mixins.CreateModelMixin,
                    mixins.RetrieveModelMixin,
                    mixins.UpdateModelMixin,
                    mixins.DestroyModelMixin,
                    viewsets.GenericViewSet):
-    """
-    Admin CRUD
-    """
     queryset = Admin.objects.all()
     serializer_class = AdminSerializer
     permission_classes = [IsAdminUser]
-
 
 class MeProfileView(APIView):
     permission_classes = [IsAuthenticated]
@@ -1147,7 +1133,6 @@ class MeProfileView(APIView):
         serializer.is_valid(raise_exception=True)
         serializer.save()
         return Response(serializer.data, status=status.HTTP_200_OK)
-
 
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
@@ -1169,7 +1154,6 @@ class ChangePasswordView(APIView):
         request.user.save(update_fields=['password'])
         return Response({'detail': '비밀번호가 변경되었습니다.'}, status=status.HTTP_200_OK)
 
-
 @api_view(["GET", "PUT", "PATCH"])
 @permission_classes([IsAuthenticated])
 def user_profile(request):
@@ -1177,8 +1161,117 @@ def user_profile(request):
     if request.method == "GET":
         return Response(UserProfileSerializer(user).data)
 
-    print("[user_profile] incoming data:", dict(request.data))  # 디버깅용
     ser = UserProfileSerializer(user, data=request.data, partial=True)
     ser.is_valid(raise_exception=True)
     ser.save()
     return Response(ser.data, status=status.HTTP_200_OK)
+
+# ─────────────────────────────────────────────────────────────
+# Dashboard (간단 API)
+# ─────────────────────────────────────────────────────────────
+
+def _require_login_json(view):
+    def wrapper(request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return JsonResponse({"detail": "Unauthorized"}, status=401)
+        return view(request, *args, **kwargs)
+    return wrapper
+
+DONE_STATUSES = {"처리완료", "종료"}
+
+@require_GET
+@_require_login_json
+def dashboard_report_stats(request):
+    now = timezone.localtime()
+    start_today = now.replace(hour=0, minute=0, second=0, microsecond=0)
+
+    qs = Report.objects.all()
+    total = qs.count()
+    today = qs.filter(report_date__gte=start_today).count()
+
+    UNRESOLVED = ("처리중", "접수", "미처리", "대기")
+    unresolved = qs.filter(status__in=UNRESOLVED).count()
+
+    return JsonResponse({
+        "total_reports": total,
+        "today_reports": today,
+        "unresolved_reports": unresolved,
+    })
+
+@require_GET
+@_require_login_json
+def dashboard_reports(request):
+    """
+    신고 리스트 (검색/페이지네이션)
+    GET  /api/dashboard/reports/?page=1&page_size=20&q=키워드
+    """
+    q = (request.GET.get("q") or "").strip()
+    page = int(request.GET.get("page") or 1)
+    page_size = int(request.GET.get("page_size") or 20)
+
+    # FK 미리 로드
+    qs = (Report.objects
+          .select_related("animal", "user", "location")
+          .order_by("-report_date"))
+
+    if q:
+        qs = qs.filter(
+            Q(animal__name_kor__icontains=q) | Q(animal__name__icontains=q) |
+            Q(location__region__icontains=q) | Q(location__city__icontains=q) | Q(location__district__icontains=q) |
+            Q(user__username__icontains=q) | Q(user__email__icontains=q)
+        )
+
+    p = Paginator(qs, page_size)
+    page_obj = p.get_page(page)
+
+    def animal_label(r: Report) -> str:
+        a = getattr(r, "animal", None)
+        if not a:
+            return ""
+        return getattr(a, "name_kor", None) or getattr(a, "name", None) or ""
+
+    def region_label(r: Report) -> str:
+        loc = getattr(r, "location", None)
+        if not loc:
+            return ""
+        # 표시 규칙: 구/군 > 시 > region > address
+        return (
+            (loc.district or "").strip()
+            or (loc.city or "").strip()
+            or (loc.region or "").strip()
+            or (loc.address or "").strip()
+        )
+
+    def row(r: Report):
+        return {
+            "id": r.id,
+            "title": "",
+            "animal": animal_label(r),
+            "region": region_label(r),
+            "status": r.status,
+            "created_at": timezone.localtime(r.report_date).strftime("%Y-%m-%d %H:%M"),
+            "reporter": (r.user.username if r.user_id else ""),
+        }
+
+    return JsonResponse({
+        "results": [row(r) for r in page_obj.object_list],
+        "page": page_obj.number,
+        "total_pages": p.num_pages,
+        "count": p.count,
+    })
+
+@require_GET
+@_require_login_json
+def dashboard_reporters(request):
+    limit = int(request.GET.get("limit") or 10)
+    agg = (Report.objects
+           .values("user__username")
+           .annotate(cnt=Count("id"))
+           .order_by("-cnt")[:limit])
+
+    data = [{
+        "reporter": (row["user__username"] or "(알수없음)"),
+        "count": row["cnt"]
+    } for row in agg]
+
+    return JsonResponse({"results": data})

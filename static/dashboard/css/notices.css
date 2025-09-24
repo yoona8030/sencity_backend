@@ -1,0 +1,218 @@
+/* 페이지 타이틀 */
+
+.page-notices .page-title {
+    font-size: 36px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin: 8px 0 16px;
+}
+
+
+/* 카드 */
+
+.page-notices .page-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 16px;
+    padding: 16px 18px;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.05);
+}
+
+
+/* 툴바 */
+
+.page-notices .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 18px;
+    flex-wrap: wrap;
+    /* 줄었을 때 접힘 */
+}
+
+.page-notices .section-actions-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.page-notices .section-actions-right {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 1;
+    /* 오른쪽이 먼저 줄어듦 */
+}
+
+.page-notices .search-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 1;
+}
+
+.page-notices .search-wrap .input {
+    flex: 1;
+    min-width: 160px;
+}
+
+
+/* 입력/버튼 */
+
+.page-notices .input {
+    height: 36px;
+    padding: 0 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    background: #fff;
+    min-width: 140px;
+}
+
+.page-notices .input.select {
+    min-width: 140px;
+}
+
+.page-notices .btn {
+    height: 36px;
+    padding: 0 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    background: #f9fafb;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.page-notices .btn.primary {
+    background: #111827;
+    color: #fff;
+    border-color: #111827;
+}
+
+
+/* 표 */
+
+.page-notices .table-scroll {
+    overflow: auto;
+}
+
+.page-notices table.table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 760px;
+}
+
+.page-notices table.table thead th {
+    text-align: left;
+    font-weight: 700;
+    font-size: 14px;
+    color: #111827;
+    border-bottom: 1px solid #e5e7eb;
+    padding: 10px;
+    background: #fafafa;
+}
+
+.page-notices table.table tbody td {
+    font-size: 14px;
+    color: #374151;
+    border-bottom: 1px solid #f1f5f9;
+    padding: 12px 10px;
+    vertical-align: middle;
+}
+
+.page-notices table.table tbody tr:hover {
+    background: #fafafa;
+}
+
+.page-notices .table .title-cell {
+    cursor: pointer;
+}
+
+.page-notices .table .title-cell:hover {
+    text-decoration: underline;
+}
+
+.page-notices .table .title-cell:focus {
+    outline: none;
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+.page-notices .table .title-cell:focus-visible {
+    outline: none;
+    /* 완전히 숨기고 싶으면 transparent */
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+.page-notices .title-cell {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    min-width: 0;
+}
+
+.page-notices .title-cell {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.page-notices .empty {
+    text-align: center;
+    color: #9ca3af;
+    height: 72px;
+}
+
+
+/* 행 토글 버튼 */
+
+.page-notices .row-toggle {
+    width: 26px;
+    height: 26px;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    border-radius: 6px;
+    cursor: pointer;
+    margin-right: 6px;
+}
+
+
+/* 상세 */
+
+.page-notices .detail-row .detail-cell {
+    padding: 0 10px 14px 54px;
+    background: #fff;
+}
+
+.page-notices .detail-box {
+    border: 1px solid #e5e7eb;
+    background: #fbfbfb;
+    border-radius: 12px;
+    padding: 14px;
+    white-space: normal;
+    line-height: 1.6;
+}
+
+.page-notices .detail-loading {
+    color: #6b7280;
+}
+
+.page-notices .detail-error {
+    color: #b91c1c;
+}
+
+
+/* 모바일 */
+
+@media (max-width: 640px) {
+    .page-notices .section-actions-right {
+        margin-left: 0;
+    }
+}

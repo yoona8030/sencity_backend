@@ -35,6 +35,11 @@ INSTALLED_APPS = [
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
+    "ROTATE_REFRESH_TOKENS": True,  # 갱신 시 refresh 교체(보안↑)
+    "BLACKLIST_AFTER_ROTATION": True,
+    "AUTH_HEADER_TYPES": ("Bearer",),
+    "UPDATE_LAST_LOGIN": True,
+    "LEEWAY": 30,  # (선택) 단말 시계 오차 허용 30초
 }
 
 MIDDLEWARE = [
@@ -90,20 +95,6 @@ REST_FRAMEWORK = {
     ],
     'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend'],
 }
-
-# Database
-# https://docs.djangoproject.com/en/5.2/ref/settings/#databases
-
-#DATABASES = {
-#    'default': {
-#        'ENGINE': 'django.db.backends.mysql',
-#        'NAME': 'sencity',              # 사용할 MySQL 데이터베이스 이름
-#        'USER': 'root',                 # MySQL 사용자 이름
-#        'PASSWORD': 'yuna4689!',          # 사용자 비밀번호
-#        'HOST': 'localhost',            # MySQL 서버 주소 (로컬이면 localhost)
-#        'PORT': '3306',                 # 기본 포트
-#    }
-#}
 
 DATABASES = {
     'default': {

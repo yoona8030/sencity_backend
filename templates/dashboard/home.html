@@ -1,95 +1,282 @@
-{% load static %}
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>관리자 페이지 | CCTV 관리</title>
+{% extends "dashboard/base.html" %} {% load static %} {% block title %}대시보드{% endblock %} {% block extra_head %}
+<link rel="stylesheet" href="{% static 'dashboard/css/home.css' %}?v=2025-09-23-title-fix" /> {% endblock %} {% block content %}
+<div class="dash">
+    <!-- 상단: 제목 → 설명 → 액션버튼(한 줄) -->
+    <header class="dash__header">
+        <h1 class="page-title">대시보드</h1>
+        <div class="dash__meta">
+            <p class="page-subtitle">현황을 한눈에 확인하고 바로 조치하세요</p>
 
-  <!-- Font Awesome -->
-  <link
-    rel="stylesheet"
-    href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css"
-  />
-
-  <!-- 프로젝트 CSS -->
-  <link rel="stylesheet" href="{% static 'dashboard/css/dashboard.css' %}" />
-</head>
-<body>
-  <div class="container">
-    <!-- 사이드바 -->
-    <aside class="sidebar">
-      <div class="sidebar-brand">관리자 페이지</div>
-      <div class="sidebar-logo">
-        <img src="{% static 'dashboard/images/logo.png' %}" alt="SENCITY" />
-        <span>SENCITY</span>
-      </div>
-      <a href="/admin/" class="sidebar-link">
-        <i class="fa-solid fa-arrow-up-right-from-square"></i>
-        사이트 바로가기
-      </a>
-      <hr />
-      <nav class="sidebar-menu">
-        <div class="menu-group">사이트 관리</div>
-        <a href="#" class="menu-item"><i class="fa-solid fa-th-large"></i> 대시보드</a>
-        <a href="#" class="menu-item"><i class="fa-solid fa-camera"></i> CCTV 관리</a>
-        <a href="#" class="menu-item"><i class="fa-solid fa-tv"></i> 신고 처리 및 관리</a>
-        <a href="#" class="menu-item"><i class="fa-solid fa-gear"></i> 설정</a>
-        <a href="#" class="menu-item"><i class="fa-solid fa-user"></i> 사용자 관리</a>
-        <div class="menu-group">콘텐츠 및 통계</div>
-        <a href="#" class="menu-item"><i class="fa-solid fa-chart-column"></i> 데이터 분석 및 통계</a>
-        <a href="#" class="menu-item"><i class="fa-solid fa-file-lines"></i> 콘텐츠 관리</a>
-        <a href="#" class="menu-item"><i class="fa-solid fa-bell"></i> 공지 설정</a>
-      </nav>
-    </aside>
-
-    <!-- 메인 콘텐츠 -->
-    <main class="main-content">
-      <div class="dashboard-body">
-        <h1>CCTV 관리</h1>
-        <div class="dashboard-grid">
-          <!-- 디바이스 현황 -->
-          <section class="panel devices-panel">
-            <h2>CCTV 디바이스 현황</h2>
-            <div class="devices-list">
-              {% for d in devices %}
-              <div class="device-card {{ d.status|lower }}">
-                <div class="device-left">
-                  <i class="fa-solid fa-camera"></i>
-                  <div class="device-info">
-                    <span class="name">{{ d.name }}</span>
-                    <span class="status">{{ d.status }}</span>
-                  </div>
-                </div>
-                <div class="device-dot"></div>
-              </div>
-              {% endfor %}
+            <div class="actions">
+                <a href="{% url 'dashboard:cctv' %}" class="btn">
+                    <i class="fa-solid fa-video"></i> CCTV 관리
+                </a>
+                <a href="{% url 'dashboard:reports' %}" class="btn">
+                    <i class="fa-solid fa-list-check"></i> 신고 처리
+                </a>
+                <a href="{% url 'dashboard:analytics' %}" class="btn">
+                    <i class="fa-solid fa-chart-column"></i> 통계 보기
+                </a>
+                <a href="{% url 'dashboard:settings' %}" class="btn">
+                    <i class="fa-solid fa-gear"></i> 설정
+                </a>
             </div>
-          </section>
-
-          <!-- 실시간 영상 -->
-          <section class="panel video-panel">
-            <h2>실시간 영상</h2>
-            <video src="{{ video_url }}" controls autoplay muted></video>
-          </section>
-
-          <!-- 모션 센서 -->
-          <section class="panel sensors-panel">
-            <h2>모션 센서</h2>
-            <div class="sensors-grid">
-              {% for s in sensors %}
-              <div class="sensor-card {% if s.status == '감지됨' %}detected{% endif %}">
-                <i class="fa-solid fa-shield-halved"></i>
-                <span class="sensor-text">
-                  {{ s.device.name }} 구역<br/>{{ s.status }}
-                </span>
-              </div>
-              {% endfor %}
-            </div>
-          </section>
         </div>
-      </div>
-    </main>
-  </div>
-</body>
-</html>
+    </header>
+
+    {% if server_banner %}
+    <div class="dash__banner" role="alert">
+        <i class="fa-solid fa-circle-info"></i>
+        <div class="dash__banner-text">{{ server_banner }}</div>
+        <a href="{% url 'dashboard:settings' %}" class="link">설정</a>
+    </div>
+    {% endif %}
+
+    <!-- KPI -->
+    <section class="grid grid--kpi">
+        <article class="card kpi">
+            <div class="kpi__label">총 신고</div>
+            <div class="kpi__value" id="kpi-total">{{ stats.total }}</div>
+            <div class="kpi__hint">
+                <a href="{% url 'dashboard:reports' %}" class="link">전체 보기</a>
+            </div>
+        </article>
+
+        <article class="card kpi">
+            <div class="kpi__label">오늘 접수</div>
+            <div class="kpi__value" id="kpi-today">{{ stats.today }}</div>
+            <div class="kpi__hint">오늘 날짜 기준</div>
+        </article>
+
+        <article class="card kpi">
+            <div class="kpi__label">미해결</div>
+            <div class="kpi__value" id="kpi-unresolved">{{ stats.unresolved }}</div>
+            <div class="kpi__hint">checking 또는 on_hold</div>
+        </article>
+
+        <article class="card kpi">
+            <div class="kpi__label">처리율</div>
+            <div class="kpi__value" id="kpi-rate">
+                {{ stats.rate }}
+                <span class="unit">%</span>
+            </div>
+            <div class="kpi__hint">완료 / 전체</div>
+        </article>
+    </section>
+
+    <!-- 본문 2열 -->
+    <section class="grid grid--main">
+        <!-- 좌: 라이브 + 공지 -->
+        <div class="col">
+            <article class="card">
+                <div class="card__head">
+                    <h3>실시간 상황</h3>
+                    <a class="link" href="{% url 'dashboard:cctv' %}">CCTV 관리로 이동</a>
+                </div>
+                <div class="live__body">
+                    <img class="live__img" src="{% static 'dashboard/images/squirrel.png' %}" alt="라이브 미리보기" />
+                    <ul class="live__events" id="event-timeline">
+                        <li class="live__empty">최근 이벤트가 없습니다.</li>
+                    </ul>
+                </div>
+            </article>
+
+            <article class="card">
+                <div class="card__head">
+                    <h3>최근 공지</h3>
+                    <a class="link" href="{% url 'dashboard:notices' %}">전체 공지</a>
+                </div>
+                <ul class="notice__list">
+                    {% if notices %} {% for n in notices|slice:":4" %}
+                    <li class="notice__item">
+                        <div class="notice__title">{{ n.title_suggest }}</div>
+                        <div class="notice__meta">
+                            <span>{{ n.created_at|default_if_none:"" }}</span>
+                            <span class="dot"></span>
+                            <span>{{ n.scope }}</span> {% if n.report_id %}
+                            <span class="dot"></span>
+                            <span>#{{ n.report_id }}</span> {% endif %}
+                        </div>
+                        {% if n.content %}
+                        <p class="notice__snippet">{{ n.content|truncatechars:120 }}</p>
+                        {% endif %}
+                    </li>
+                    {% endfor %} {% else %}
+                    <li class="notice__empty">표시할 공지가 없습니다.</li>
+                    {% endif %}
+                </ul>
+            </article>
+        </div>
+
+        <!-- 우: 최근 신고(6) + TOP -->
+        <div class="col">
+            <article class="card">
+                <div class="card__head">
+                    <h3>최근 신고</h3>
+                    <a class="link" href="{% url 'dashboard:reports' %}">신고 관리</a>
+                </div>
+                <div class="table__wrap">
+                    <table class="tbl">
+                        <thead>
+                            <tr>
+                                <th style="width: 80px">ID</th>
+                                <th>동물</th>
+                                <th>지역</th>
+                                <th>상태</th>
+                                <th style="width: 160px">접수시각</th>
+                                <th style="width: 120px">사용자</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recent-reports">
+                            <tr>
+                                <td class="td-empty" colspan="6">불러오는 중…</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </article>
+
+            <article class="card">
+                <div class="card__head">
+                    <h3>신고한 사용자 TOP</h3>
+                </div>
+                <ul class="top-users__list" id="top-reporters">
+                    <li class="top-users__empty">불러오는 중…</li>
+                </ul>
+            </article>
+        </div>
+    </section>
+</div>
+
+<!-- JS (ES5) -->
+<script>
+    (function() {
+        function E(id) {
+            return document.getElementById(id);
+        }
+
+        function setText(id, val) {
+            var el = E(id);
+            if (el) {
+                el.textContent = String(val);
+            }
+        }
+
+        function refreshKPI() {
+            fetch('/dashboard/api/report-stats/', {
+                    credentials: 'same-origin',
+                })
+                .then(function(r) {
+                    return r.json();
+                })
+                .then(function(d) {
+                    var total = d && d.total != null ? d.total : 0;
+                    var today = d && d.today != null ? d.today : 0;
+                    var unresolved = d && d.unresolved != null ? d.unresolved : 0;
+                    setText('kpi-total', total);
+                    setText('kpi-today', today);
+                    setText('kpi-unresolved', unresolved);
+                    var handled = Math.max(total - unresolved, 0);
+                    var rate = total > 0 ? Math.floor((handled * 100) / total) : 0;
+                    var rateEl = E('kpi-rate');
+                    if (rateEl) {
+                        rateEl.innerHTML = rate + '<span class="unit">%</span>';
+                    }
+                })
+                .catch(function() {});
+        }
+        refreshKPI();
+        setInterval(refreshKPI, 60000);
+
+        function loadRecentReports() {
+            // 6건으로 제한
+            fetch('/dashboard/api/reports/?page_size=6', {
+                    credentials: 'same-origin',
+                })
+                .then(function(r) {
+                    return r.json();
+                })
+                .then(function(d) {
+                    var tbody = E('recent-reports');
+                    if (!tbody) return;
+                    var items = d && d.results ? d.results : [];
+                    if (items.length === 0) {
+                        tbody.innerHTML = '<tr><td class="td-empty" colspan="6">최근 신고가 없습니다.</td></tr>';
+                        return;
+                    }
+                    var html = '';
+                    for (var i = 0; i < items.length; i++) {
+                        var r = items[i];
+                        html +=
+                            '<tr>' +
+                            '<td>' +
+                            (r.id != null ? r.id : '') +
+                            '</td>' +
+                            '<td>' +
+                            (r.animal || '') +
+                            '</td>' +
+                            '<td class="td-ell">' +
+                            (r.region || '') +
+                            '</td>' +
+                            '<td><span class="badge ' +
+                            (r.status || '') +
+                            '">' +
+                            (r.status || '') +
+                            '</span></td>' +
+                            '<td>' +
+                            (r.created_at || '') +
+                            '</td>' +
+                            '<td>' +
+                            (r.reporter || '') +
+                            '</td>' +
+                            '</tr>';
+                    }
+                    tbody.innerHTML = html;
+                })
+                .catch(function() {
+                    var tbody = E('recent-reports');
+                    if (tbody) {
+                        tbody.innerHTML = '<tr><td class="td-empty" colspan="6">불러오기 실패</td></tr>';
+                    }
+                });
+        }
+        loadRecentReports();
+
+        function loadTopReporters() {
+            fetch('/dashboard/api/reporters/?limit=5', {
+                    credentials: 'same-origin',
+                })
+                .then(function(r) {
+                    return r.json();
+                })
+                .then(function(d) {
+                    var ul = E('top-reporters');
+                    if (!ul) return;
+                    var items = d && d.results ? d.results : [];
+                    if (items.length === 0) {
+                        ul.innerHTML = '<li class="top-users__empty">데이터 없음</li>';
+                        return;
+                    }
+                    var html = '';
+                    for (var i = 0; i < items.length; i++) {
+                        var x = items[i];
+                        html +=
+                            '<li class="top-users__item"><span class="name">' +
+                            (x.name || '익명') +
+                            '</span><span class="count">' +
+                            (x.count != null ? x.count : 0) +
+                            '</span></li>';
+                    }
+                    ul.innerHTML = html;
+                })
+                .catch(function() {
+                    var ul = E('top-reporters');
+                    if (ul) {
+                        ul.innerHTML = '<li class="top-users__empty">불러오기 실패</li>';
+                    }
+                });
+        }
+        loadTopReporters();
+    })();
+</script>
+{% endblock %}

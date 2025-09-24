@@ -1,0 +1,322 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>관리자 페이지 | 신고 처리 및 관리</title>
+
+    <!-- Favicon -->
+    <link rel="icon" href="{% static 'dashboard/images/favicon.ico' %}" sizes="any" />
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" />
+
+    <!-- 공통 레이아웃/사이드바 -->
+    <link rel="stylesheet" href="{% static 'dashboard/css/dashboard.css' %}?v=fit-2025-09-19" />
+
+    <!-- 이 화면 전용 스타일 -->
+    <link rel="stylesheet" href="{% static 'dashboard/css/reports.css' %}?v=2025-09-19" />
+</head>
+
+<body class="page-reports">
+    <div class="container">
+        <!-- 사이드바 -->
+        <aside class="sidebar">
+            <div class="sidebar-brand">관리자 페이지</div>
+            <div class="sidebar-logo">
+                <img src="{% static 'dashboard/images/logo.png' %}" alt="SENCITY" />
+                <span>SENCITY</span>
+            </div>
+            <a href="{% url 'admin:index' %}" class="sidebar-link">
+                <i class="fa-solid fa-arrow-up-right-from-square"></i> 사이트 바로가기
+            </a>
+            <hr />
+            <nav class="sidebar-menu">
+                <div class="menu-group">사이트 관리</div>
+                <a href="{% url 'dashboard:home' %}" class="menu-item">
+                    <i class="fa-solid fa-th-large"></i> 대시보드
+                </a>
+                <a href="{% url 'dashboard:cctv' %}" class="menu-item">
+                    <i class="fa-solid fa-camera"></i> CCTV 관리
+                </a>
+                <a href="{% url 'dashboard:reports' %}" class="menu-item active">
+                    <i class="fa-solid fa-tv"></i> 신고 처리 및 관리
+                </a>
+                <a href="{% url 'dashboard:settings' %}" class="menu-item">
+                    <i class="fa-solid fa-gear"></i> 설정
+                </a>
+                <a href="{% url 'dashboard:users' %}" class="menu-item">
+                    <i class="fa-solid fa-user"></i> 사용자 관리
+                </a>
+
+                <div class="menu-group">콘텐츠 및 통계</div>
+                <a href="{% url 'dashboard:analytics' %}" class="menu-item">
+                    <i class="fa-solid fa-chart-column"></i> 데이터 분석 및 통계
+                </a>
+                <a href="{% url 'dashboard:contents' %}" class="menu-item">
+                    <i class="fa-solid fa-file-lines"></i> 콘텐츠 관리
+                </a>
+                <a href="{% url 'dashboard:notices' %}" class="menu-item">
+                    <i class="fa-solid fa-bell"></i> 공지 설정
+                </a>
+            </nav>
+        </aside>
+
+        <!-- 본문 -->
+        <main class="main">
+            <div class="main-content">
+                <div class="dashboard-body page-wrap">
+                    <h1 class="page-title">신고 처리 및 관리</h1>
+
+                    <div class="page-grid">
+                        <!-- 요약 -->
+                        <section class="summary-strip card indent-under-title" id="summary">
+                            <div class="summary-item">
+                                <i class="fa-regular fa-clipboard" aria-label="총 신고 건수"></i>
+                                <div>
+                                    <div class="label">총 신고 건수</div>
+                                    <div class="value" id="s-total">-</div>
+                                </div>
+                            </div>
+                            <div class="summary-item">
+                                <i class="fa-regular fa-sun" aria-label="오늘 접수"></i>
+                                <div>
+                                    <div class="label">오늘 접수</div>
+                                    <div class="value" id="s-today">-</div>
+                                </div>
+                            </div>
+                            <div class="summary-item">
+                                <i class="fa-regular fa-bell" aria-label="미해결"></i>
+                                <div>
+                                    <div class="label">미해결</div>
+                                    <div class="value" id="s-unresolved">-</div>
+                                </div>
+                            </div>
+                        </section>
+
+                        <!-- 본문 리스트 -->
+                        <div class="page-main">
+                            <section class="card indent-under-title">
+                                <h3>최근 신고 리스트</h3>
+                                <div class="toolbar">
+                                    <input id="q" placeholder="키워드/지역/상태/신고자" />
+                                    <button id="search">검색</button>
+                                </div>
+                                <div class="table-wrap">
+                                    <div id="report-list"></div>
+                                </div>
+                            </section>
+                        </div>
+
+                        <!-- 오른쪽 사이드 -->
+                        <aside class="page-aside">
+                            <section class="card">
+                                <h3>신고한 사용자 TOP</h3>
+                                <div id="reporters"></div>
+                            </section>
+                        </aside>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 전용 스크립트 -->
+    <script>
+        /* ===== API 엔드포인트 ===== */
+        const API_REPORT_STATS = '/dashboard/api/report-stats/';
+        const API_REPORTS = '/dashboard/api/reports/';
+        const API_REPORTERS = '/dashboard/api/reporters/';
+
+        /* ===== 엘리먼트 헬퍼 ===== */
+        const els = {
+            total: () => document.getElementById('s-total'),
+            today: () => document.getElementById('s-today'),
+            unresolved: () => document.getElementById('s-unresolved'),
+            list: () => document.getElementById('report-list'),
+            reporters: () => document.getElementById('reporters'),
+            q: () => document.getElementById('q'),
+            searchBtn: () => document.getElementById('search'),
+        };
+
+        /* ===== 공통 유틸 ===== */
+        function htmlEscape(s = '') {
+            return s.replace(
+                /[&<>"']/g,
+                (m) =>
+                ({
+                    '&': '&amp;',
+                    '<': '&lt;',
+                    '>': '&gt;',
+                    '"': '&quot;',
+                    "'": '&#39;',
+                }[m])
+            );
+        }
+
+        function detailUrl(id) {
+            return `/dashboard/reports/${id}/`;
+        }
+        async function fetchJSON(url) {
+            const r = await fetch(url, {
+                credentials: 'same-origin',
+            });
+            if (!r.ok) {
+                const msg = await r.text().catch(() => r.statusText);
+                throw new Error(`HTTP ${r.status} ${msg}`);
+            }
+            return r.json();
+        }
+
+        function statusBadge(text) {
+            const t = (text || '').toLowerCase();
+            const cls = ['완료', '처리완료', '종료'].some((k) => text && text.includes(k)) ?
+                'status--completed' :
+                ['처리중', '진행중', '확인중'].some((k) => text && text.includes(k)) ?
+                'status--checking' :
+                ['대기', '미처리', '보류'].some((k) => text && text.includes(k)) ?
+                'status--onhold' :
+                t === 'completed' ?
+                'status--completed' :
+                t === 'checking' ?
+                'status--checking' :
+                t === 'on_hold' ?
+                'status--onhold' :
+                'status--default';
+            return `<span class="status ${cls}">${htmlEscape(text || '')}</span>`;
+        }
+
+        /* ===== 상단 요약 ===== */
+        async function loadSummary() {
+            els.total().textContent = '…';
+            els.today().textContent = '…';
+            els.unresolved().textContent = '…';
+
+            const d = await fetchJSON(API_REPORT_STATS);
+
+            /* ⬇️ nullish 연산자(??) 대신 삼항으로 안전 처리 */
+            els.total().textContent = d.total != null ? d.total : 0;
+            els.today().textContent = d.today != null ? d.today : 0;
+            els.unresolved().textContent = d.unresolved != null ? d.unresolved : 0;
+        }
+
+        /* ===== 리스트 렌더 ===== */
+        function renderTable(d) {
+            const rows = (d.results || [])
+                .map(
+                    (r) => `
+          <tr data-id="${r.id}">
+            <td>${r.id}</td>
+            <td>${htmlEscape(r.animal || '')}</td>
+            <td>${htmlEscape(r.reporter || '')}</td>
+            <td>${htmlEscape(r.region || '')}</td>
+            <td>${statusBadge(r.status)}</td>
+          </tr>
+        `
+                )
+                .join('');
+
+            const pager =
+                d.total_pages > 1 ?
+                `
+          <div class="pager">
+            <button data-pg="${Math.max(1, (d.page || 1) - 1)}" ${d.page <= 1 ? 'disabled' : ''}>이전</button>
+            <span class="pageno">${d.page} / ${d.total_pages}</span>
+            <button data-pg="${Math.min(d.total_pages, (d.page || 1) + 1)}" ${d.page >= d.total_pages ? 'disabled' : ''}>다음</button>
+          </div>` :
+                '';
+
+            document.getElementById('report-list').innerHTML = `
+          <table class="table">
+            <colgroup>
+              <col style="width:8ch" />
+              <col style="width:12ch" />
+              <col />
+              <col />
+              <col style="width:12ch" />
+            </colgroup>
+            <thead>
+              <tr><th>ID</th><th>동물</th><th>사용자</th><th>지역</th><th>상태</th></tr>
+            </thead>
+            <tbody>
+              ${rows || `<tr><td colspan="5" class="empty">데이터가 없습니다</td></tr>`}
+            </tbody>
+          </table>
+          ${pager}
+        `;
+
+        document.querySelectorAll('#report-list button[data-pg]').forEach((b) => {
+          b.addEventListener('click', () => {
+            const p = Number(b.getAttribute('data-pg'));
+            loadReports(p, els.q().value.trim());
+          });
+        });
+
+        document.querySelectorAll('#report-list tbody tr[data-id]').forEach((tr) => {
+          tr.addEventListener('click', (e) => {
+            if (!e.target.closest('a')) window.location.href = detailUrl(tr.dataset.id);
+          });
+        });
+      }
+
+      /* ===== 리스트 로드 ===== */
+      async function loadReports(page = 1, q = '') {
+        document.getElementById('report-list').innerHTML = `<div class="loading">불러오는 중…</div>`;
+        const url = new URL(API_REPORTS, window.location.origin);
+        url.searchParams.set('page', page);
+        url.searchParams.set('page_size', 20);
+        if (q) url.searchParams.set('q', q);
+
+        const d = await fetchJSON(url);
+        renderTable(d);
+      }
+
+      /* ===== 신고자 TOP ===== */
+      async function loadReporters() {
+        els.reporters().innerHTML = `<div class="loading">불러오는 중…</div>`;
+        const url = new URL(API_REPORTERS, window.location.origin);
+        url.searchParams.set('limit', 10);
+
+        const d = await fetchJSON(url);
+        els.reporters().innerHTML = `
+          <div class="list">
+            ${
+              (d.results || [])
+                .map(
+                  (r) => `
+                <div class="list-item">
+                  <span class="name">${htmlEscape(r.name || '(알수없음)')}</span>
+                  <span class="count">${r.count != null ? r.count : 0}</span>
+                </div>
+              `
+                )
+                .join('') || `<div class="empty">데이터가 없습니다</div>`
+            }
+          </div>`;
+      }
+
+      /* ===== 검색(디바운스 + 버튼) ===== */
+      let searchTimer;
+      document.addEventListener('DOMContentLoaded', () => {
+        els.q().addEventListener('input', () => {
+          clearTimeout(searchTimer);
+          searchTimer = setTimeout(() => loadReports(1, els.q().value.trim()), 300);
+        });
+        els.searchBtn().addEventListener('click', () => loadReports(1, els.q().value.trim()));
+      });
+
+      /* ===== 초기 로드 ===== */
+      (async function init() {
+        try {
+          await Promise.all([loadSummary(), loadReports(1, ''), loadReporters()]);
+        } catch (e) {
+          console.error(e);
+          alert('데이터를 불러오지 못했습니다.');
+        }
+      })();
+    </script>
+</body>
+
+</html>

@@ -1,0 +1,63 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% block title %}관리자 페이지{% endblock %}</title>
+
+    <link rel="icon" href="{% static 'dashboard/images/favicon.ico' %}" sizes="any" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" />
+    <link rel="stylesheet" href="{% static 'dashboard/css/dashboard.css' %}?v=fit-2025-09-19" /> {% block extra_head %}{% endblock %}
+</head>
+
+<body>
+    <div class="container">
+        <aside class="sidebar">
+            <div class="sidebar-brand">관리자 페이지</div>
+            <div class="sidebar-logo">
+                <img src="{% static 'dashboard/images/logo.png' %}" alt="SENCITY" />
+                <span>SENCITY</span>
+            </div>
+            <a href="{% url 'admin:index' %}" class="sidebar-link">
+                <i class="fa-solid fa-arrow-up-right-from-square"></i> 사이트 바로가기
+            </a>
+            <hr />
+            <nav class="sidebar-menu">
+                <div class="menu-group">사이트 관리</div>
+
+                <a href="{% url 'dashboard:home' %}" class="menu-item">
+                    <i class="fa-solid fa-th-large"></i> 대시보드
+                </a>
+                <a href="{% url 'dashboard:cctv' %}" class="menu-item">
+                    <i class="fa-solid fa-camera"></i> CCTV 관리
+                </a>
+                <a href="{% url 'dashboard:reports' %}" class="menu-item">
+                    <i class="fa-solid fa-tv"></i> 신고 처리 및 관리
+                </a>
+                <a href="{% url 'dashboard:settings' %}" class="menu-item">
+                    <i class="fa-solid fa-gear"></i> 설정
+                </a>
+                <a href="{% url 'dashboard:users' %}" class="menu-item">
+                    <i class="fa-solid fa-user"></i> 사용자 관리
+                </a>
+
+                <div class="menu-group">콘텐츠 및 통계</div>
+                <a href="{% url 'dashboard:analytics' %}" class="menu-item">
+                    <i class="fa-solid fa-chart-column"></i> 데이터 분석 및 통계
+                </a>
+                <a href="{% url 'dashboard:contents' %}" class="menu-item">
+                    <i class="fa-solid fa-file-lines"></i> 콘텐츠 관리
+                </a>
+                <a href="{% url 'dashboard:notices' %}" class="menu-item">
+                    <i class="fa-solid fa-bell"></i> 공지 설정
+                </a>
+            </nav>
+        </aside>
+
+        <main class="main-content">{% block content %}{% endblock %}{% block body %}{% endblock %}</main>
+    </div>
+</body>
+
+</html>

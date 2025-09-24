@@ -1,0 +1,114 @@
+/* 사용자 관리 페이지 전용 스타일 */
+
+
+/* 레이아웃: reports/settings와 동일하게 넓게 씀 */
+
+.wrap {
+    max-width: none;
+    margin: 0 auto;
+    padding: 16px 24px 40px;
+}
+
+.page-title {
+    margin: 0 0 16px;
+    font-size: 2rem;
+    font-weight: 800;
+}
+
+
+/* 카드 */
+
+.card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 16px 18px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+}
+
+
+/* 툴바 */
+
+.toolbar {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.toolbar input {
+    height: 36px;
+    padding: 0 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    outline: none;
+}
+
+.toolbar button {
+    height: 36px;
+    padding: 0 14px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    background: #f3f4f6;
+    cursor: pointer;
+}
+
+
+/* 테이블 */
+
+.table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.table thead th {
+    background: #fafafa;
+    font-weight: 700;
+    color: #374151;
+}
+
+.table th,
+.table td {
+    padding: 12px 14px;
+    border-bottom: 1px solid #eee;
+    vertical-align: middle;
+    word-break: keep-all;
+    text-align: left;
+}
+
+.table td:nth-child(3) {
+    /* 이메일 칼럼 말줄임 */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.table .empty {
+    text-align: center;
+    color: #6b7280;
+}
+
+
+/* 이 페이지는 화면을 넓게 쓰므로 고정폭 해제 */
+
+.page-users .main-content,
+.page-users .dashboard-body {
+    max-width: none !important;
+    margin: 0 !important;
+}
+
+
+/* 반응형: 좁은 화면에서 버튼/인풋 쌓기 */
+
+@media (max-width: 640px) {
+    .toolbar {
+        grid-template-columns: 1fr;
+    }
+}
