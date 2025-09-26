@@ -103,7 +103,7 @@
                     </h2>
                     <div class="template-grid">
                         <!-- 신규 기능 카드 -->
-                        <article class="tmpl-card">
+                        <article class="tmpl-card" data-template-id="new-card">
                             <div class="tmpl-head">
                                 <div class="tmpl-icon"><i class="fa-solid fa-sparkles fa-star-of-life"></i></div>
                                 <div class="tmpl-title">신규 기능 카드</div>
@@ -115,8 +115,8 @@
                                 <span class="badge">CTA</span>
                             </div>
                             <div class="tmpl-actions">
-                                <button class="btn ghost" data-make="new-card">템플릿 생성</button>
-                                <button class="btn" data-preview="new-card">
+                                <button class="btn ghost" data-action="create">템플릿 생성</button>
+                                <button class="btn" data-action="preview">
                     <i class="fa-regular fa-eye"></i>
                     미리보기
                   </button>
@@ -124,7 +124,7 @@
                         </article>
 
                         <!-- 주간 통계 하이라이트 -->
-                        <article class="tmpl-card">
+                        <article class="tmpl-card" data-template-id="weekly">
                             <div class="tmpl-head">
                                 <div class="tmpl-icon"><i class="fa-solid fa-chart-line"></i></div>
                                 <div class="tmpl-title">주간 통계 하이라이트</div>
@@ -136,8 +136,8 @@
                                 <span class="badge">리포트</span>
                             </div>
                             <div class="tmpl-actions">
-                                <button class="btn ghost" data-make="weekly">템플릿 생성</button>
-                                <button class="btn" data-preview="weekly">
+                                <button class="btn ghost" data-action="create">템플릿 생성</button>
+                                <button class="btn" data-action="preview">
                     <i class="fa-regular fa-eye"></i>
                     미리보기
                   </button>
@@ -145,7 +145,7 @@
                         </article>
 
                         <!-- 안전 수칙 카드 -->
-                        <article class="tmpl-card">
+                        <article class="tmpl-card" data-template-id="safety">
                             <div class="tmpl-head">
                                 <div class="tmpl-icon"><i class="fa-solid fa-shield-heart"></i></div>
                                 <div class="tmpl-title">안전 수칙 카드</div>
@@ -156,8 +156,8 @@
                                 <span class="badge">가이드</span>
                             </div>
                             <div class="tmpl-actions">
-                                <button class="btn ghost" data-make="safety">템플릿 생성</button>
-                                <button class="btn" data-preview="safety">
+                                <button class="btn ghost" data-action="create">템플릿 생성</button>
+                                <button class="btn" data-action="preview">
                     <i class="fa-regular fa-eye"></i>
                     미리보기
                   </button>
@@ -165,7 +165,7 @@
                         </article>
 
                         <!-- 이벤트 안내 -->
-                        <article class="tmpl-card">
+                        <article class="tmpl-card" data-template-id="event">
                             <div class="tmpl-head">
                                 <div class="tmpl-icon"><i class="fa-solid fa-calendar-check"></i></div>
                                 <div class="tmpl-title">이벤트 안내</div>
@@ -176,8 +176,8 @@
                                 <span class="badge">폼 연동</span>
                             </div>
                             <div class="tmpl-actions">
-                                <button class="btn ghost" data-make="event">템플릿 생성</button>
-                                <button class="btn" data-preview="event">
+                                <button class="btn ghost" data-action="create">템플릿 생성</button>
+                                <button class="btn" data-action="preview">
                     <i class="fa-regular fa-eye"></i>
                     미리보기
                   </button>
@@ -196,7 +196,7 @@
                                 <div class="title">가을 캠페인 배너</div>
                                 <div class="meta">게시중 · 2025-09-10</div>
                             </div>
-                            <button class="btn">열기</button>
+                            <button class="btn" onclick="location.href='/dashboard/contents/edit/123/'">열기</button>
                         </div>
                         <div class="recent-item">
                             <span class="dot dot-draft"></span>
@@ -204,7 +204,7 @@
                                 <div class="title">홈 뉴스 카드 #12</div>
                                 <div class="meta">임시저장 · 2025-09-08</div>
                             </div>
-                            <button class="btn">계속 편집</button>
+                            <button class="btn" onclick="location.href='/dashboard/contents/edit/124/'">계속 편집</button>
                         </div>
                     </div>
                 </section>
@@ -212,40 +212,203 @@
         </main>
     </div>
 
-    <!-- 간단 동작 확인 (문자/기호 문제 없는 순수 JS) -->
+    <!-- 미리보기 모달 -->
+    <div id="tmpl-modal-mask" style="
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.45);
+        z-index: 9999;
+        align-items: center;
+        justify-content: center;
+      ">
+        <div id="tmpl-modal" style="
+          width: min(920px, 90vw);
+          max-height: 86vh;
+          background: #fff;
+          border-radius: 14px;
+          box-shadow: 0 10px 40px rgba(0, 0, 0, 0.18);
+          display: flex;
+          flex-direction: column;
+        ">
+            <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid #eee">
+                <strong id="tmpl-modal-title" style="font-size: 16px">미리보기</strong>
+                <button id="tmpl-modal-close" style="height: 32px; padding: 0 10px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; cursor: pointer">
+            닫기
+          </button>
+            </div>
+            <div style="padding: 0; overflow: auto; flex: 1; min-height: 360px">
+                <iframe id="tmpl-modal-frame" src="" style="width: 100%; height: 65vh; border: 0; display: none"></iframe>
+                <img id="tmpl-modal-img" src="" alt="" style="max-width: 100%; display: none" />
+                <div id="tmpl-modal-body" style="padding: 16px; display: none"></div>
+            </div>
+            <div style="padding: 12px 16px; border-top: 1px solid #eee; display: flex; gap: 8px; justify-content: flex-end">
+                <button id="tmpl-modal-use" style="
+              height: 36px;
+              padding: 0 12px;
+              border: 1px solid #111827;
+              background: #111827;
+              color: #fff;
+              border-radius: 10px;
+              cursor: pointer;
+            ">
+            이 템플릿으로 만들기
+          </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 동작 스크립트 -->
     <script>
         (function() {
-            var q = document.getElementById('q');
-            var btnSearch = document.getElementById('btn-search');
-            var btnNew = document.getElementById('btn-new');
-            var btnAddTmpl = document.getElementById('btn-add-template');
+            // -------- 라우트(필요시 수정) --------
+            const URLS = {
+                newFromTemplate: (tid) => '/dashboard/contents/new/?template=' + encodeURIComponent(tid),
+                previewTemplate: (tid) => '/dashboard/contents/preview/?template=' + encodeURIComponent(tid),
+                addTemplate: '/dashboard/contents/templates/new/',
+                newContent: '/dashboard/contents/new/',
+                apiCreate: '/dashboard/api/contents/create/', // 있으면 사용, 없으면 자동 폴백
+            };
 
-            if (btnSearch) {
-                btnSearch.addEventListener('click', function() {
-                    var key = q && q.value ? q.value.trim() : '';
-                    console.log('search:', key);
-                });
+            // -------- DOM --------
+            const grid = document.querySelector('.template-grid, .tmpl-grid, .cards-grid, .cards3');
+            const q = document.getElementById('q');
+            const btnSearch = document.getElementById('btn-search');
+            const btnNew = document.getElementById('btn-new');
+            const btnAddTmpl = document.getElementById('btn-add-template');
+            const sel = document.getElementById('templateSelect');
+
+            // 모달
+            const $mask = document.getElementById('tmpl-modal-mask');
+            const $title = document.getElementById('tmpl-modal-title');
+            const $frame = document.getElementById('tmpl-modal-frame');
+            const $img = document.getElementById('tmpl-modal-img');
+            const $body = document.getElementById('tmpl-modal-body');
+            const $close = document.getElementById('tmpl-modal-close');
+            const $use = document.getElementById('tmpl-modal-use');
+            let currentTid = null;
+
+            // -------- 유틸 --------
+            function openModal(opts) {
+                currentTid = opts.tid || null;
+                $title.textContent = opts.title || '미리보기';
+                if (opts.iframe) {
+                    $frame.src = opts.iframe;
+                    $frame.style.display = 'block';
+                    $img.style.display = 'none';
+                    $body.style.display = 'none';
+                } else if (opts.image) {
+                    $img.src = opts.image;
+                    $img.style.display = 'block';
+                    $frame.style.display = 'none';
+                    $body.style.display = 'none';
+                } else {
+                    $body.innerHTML = opts.html || '<p>미리볼 내용이 없습니다.</p>';
+                    $body.style.display = 'block';
+                    $frame.style.display = 'none';
+                    $img.style.display = 'none';
+                }
+                $mask.style.display = 'flex';
             }
-            if (btnNew) {
-                btnNew.addEventListener('click', function() {
-                    console.log('new content');
-                });
+
+            function closeModal() {
+                $mask.style.display = 'none';
+                $frame.src = '';
+                currentTid = null;
             }
-            if (btnAddTmpl) {
-                btnAddTmpl.addEventListener('click', function() {
-                    var sel = document.getElementById('templateSelect');
-                    var val = sel && sel.value ? sel.value : '';
-                    console.log('add template:', val);
-                });
-            }
-            document.querySelectorAll('[data-make]').forEach(function(el) {
-                el.addEventListener('click', function() {
-                    console.log('make with template:', el.getAttribute('data-make'));
-                });
+            $close.addEventListener('click', closeModal);
+            $mask.addEventListener('click', (e) => {
+                if (e.target === $mask) closeModal();
             });
-            document.querySelectorAll('[data-preview]').forEach(function(el) {
+            $use.addEventListener('click', function() {
+                if (!currentTid) return closeModal();
+                location.href = URLS.newFromTemplate(currentTid);
+            });
+
+            // -------- 동작 --------
+            async function createFromTemplate(tid) {
+                // API 있으면 시도 → 실패해도 폴백 이동
+                try {
+                    const res = await fetch(URLS.apiCreate, {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            template_id: tid
+                        }),
+                    });
+                    if (res.ok) {
+                        const d = await res.json();
+                        if (d && d.edit_url) {
+                            location.href = d.edit_url;
+                            return;
+                        }
+                    }
+                } catch (e) {}
+                location.href = URLS.newFromTemplate(tid);
+            }
+
+            function previewTemplate(tid, title) {
+                openModal({
+                    tid,
+                    title: title || '미리보기',
+                    iframe: URLS.previewTemplate(tid)
+                });
+            }
+
+            // 카드 클릭 위임
+            if (grid) {
+                grid.addEventListener('click', function(e) {
+                    const btn = e.target.closest('button, a');
+                    if (!btn) return;
+
+                    let action = btn.getAttribute('data-action');
+                    const label = (btn.textContent || '').trim();
+                    if (!action) {
+                        if (/미리보기/.test(label)) action = 'preview';
+                        else if (/생성|만들기/.test(label)) action = 'create';
+                    }
+
+                    const card = btn.closest('[data-template-id]');
+                    const tid = card && card.getAttribute('data-template-id');
+                    const titleEl = card && (card.querySelector('.tmpl-title') || card.querySelector('h3, h4'));
+                    const ttitle = titleEl ? (titleEl.textContent || '').trim() : '템플릿';
+
+                    if (!tid || !action) return;
+
+                    e.preventDefault();
+                    if (action === 'create') createFromTemplate(tid);
+                    if (action === 'preview') previewTemplate(tid, ttitle);
+                });
+            }
+
+            // 상단 버튼
+            if (btnSearch)
+                btnSearch.addEventListener('click', function() {
+                    const key = ((q && q.value) || '').trim();
+                    if (!key) return;
+                    // 검색 결과 페이지가 있다면 거기로 이동
+                    location.href = '/dashboard/contents/?q=' + encodeURIComponent(key);
+                });
+            if (btnNew)
+                btnNew.addEventListener('click', function() {
+                    const v = sel && sel.value ? '?template=' + encodeURIComponent(sel.value) : '';
+                    location.href = URLS.newContent + v;
+                });
+            if (btnAddTmpl)
+                btnAddTmpl.addEventListener('click', function() {
+                    location.href = URLS.addTemplate;
+                });
+
+            // 접근성: 카드 타이틀 클릭 → 미리보기
+            document.querySelectorAll('[data-template-id] .tmpl-title').forEach(function(el) {
+                el.style.cursor = 'pointer';
                 el.addEventListener('click', function() {
-                    console.log('preview template:', el.getAttribute('data-preview'));
+                    const card = el.closest('[data-template-id]');
+                    const tid = card && card.getAttribute('data-template-id');
+                    if (tid) previewTemplate(tid, (el.textContent || '').trim());
                 });
             });
         })();

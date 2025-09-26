@@ -1,13 +1,14 @@
 {% extends "dashboard/base.html" %} {% load static %} {% block title %}대시보드{% endblock %} {% block extra_head %}
-<link rel="stylesheet" href="{% static 'dashboard/css/home.css' %}?v=2025-09-23-title-fix" /> {% endblock %} {% block content %}
+<link rel="stylesheet" href="{% static 'dashboard/css/home.css' %}?v=2025-09-24-actions-grid" /> {% endblock %} {% block content %}
 <div class="dash">
-    <!-- 상단: 제목 → 설명 → 액션버튼(한 줄) -->
+    <!-- 상단: 제목 → 설명(좌) + 액션버튼(우, 4→2열) -->
     <header class="dash__header">
         <h1 class="page-title">대시보드</h1>
+
         <div class="dash__meta">
             <p class="page-subtitle">현황을 한눈에 확인하고 바로 조치하세요</p>
 
-            <div class="actions">
+            <nav class="actions" aria-label="빠른 메뉴">
                 <a href="{% url 'dashboard:cctv' %}" class="btn">
                     <i class="fa-solid fa-video"></i> CCTV 관리
                 </a>
@@ -20,7 +21,7 @@
                 <a href="{% url 'dashboard:settings' %}" class="btn">
                     <i class="fa-solid fa-gear"></i> 설정
                 </a>
-            </div>
+            </nav>
         </div>
     </header>
 
@@ -164,7 +165,7 @@
 
         function refreshKPI() {
             fetch('/dashboard/api/report-stats/', {
-                    credentials: 'same-origin',
+                    credentials: 'same-origin'
                 })
                 .then(function(r) {
                     return r.json();
@@ -189,9 +190,8 @@
         setInterval(refreshKPI, 60000);
 
         function loadRecentReports() {
-            // 6건으로 제한
             fetch('/dashboard/api/reports/?page_size=6', {
-                    credentials: 'same-origin',
+                    credentials: 'same-origin'
                 })
                 .then(function(r) {
                     return r.json();
@@ -244,7 +244,7 @@
 
         function loadTopReporters() {
             fetch('/dashboard/api/reporters/?limit=5', {
-                    credentials: 'same-origin',
+                    credentials: 'same-origin'
                 })
                 .then(function(r) {
                     return r.json();

@@ -1,7 +1,7 @@
 import requests, ipaddress, socket
 from typing import Optional
 from urllib.parse import urlparse, urlencode
-from datetime import datetime, date, timedelta
+from datetime import datetime, time, timedelta
 from PIL import Image
 
 from django.contrib.auth import get_user_model, authenticate
@@ -11,13 +11,16 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.conf import settings
 from django.db.models import (
     Case, When, Value, CharField, F, Q, Count, Max, OuterRef, Subquery, DateTimeField
 )
+from django.db.models.functions import ExtractYear
 from django.http import StreamingHttpResponse, JsonResponse, HttpResponse, HttpResponseBadRequest
 from django.views.decorators.http import require_GET
 from django.views.decorators.cache import cache_page
+from django.views.decorators.csrf import csrf_exempt
 
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import mixins, viewsets, status, permissions
@@ -284,6 +287,16 @@ def proxy_image_view(request):
         resp["Content-Length"] = cl
     resp["Cache-Control"] = "public, max-age=86400"
     return resp
+
+def _abs_media_url(request, f) -> str:
+    """ImageFieldFile → 절대 URL (없으면 빈 문자열)"""
+    try:
+        if not f:
+            return ""
+        url = f.url  # /media/...
+        return request.build_absolute_uri(url)
+    except Exception:
+        return ""
 
 # ─────────────────────────────────────────────────────────────
 # Domain APIs
@@ -879,6 +892,80 @@ class RecognizeAnimalView(APIView):
             "animal_id": a.id if a else None,
             "topk": topk,
         })
+def _norm_text(s: str) -> str:
+    return (s or '').strip().lower()
+
+@require_GET
+@permission_classes([AllowAny])
+def animal_resolve(request):
+    """
+    GET /api/animals/resolve/?q=<label>
+    반환: { "animal_id": <int>, "confidence": "exact|alias|startswith|contains|fallback", "matched": "<str>" }
+    """
+    label = _norm_text(request.GET.get('q', ''))
+    FALLBACK_UNKNOWN_ID = 31
+
+    if not label:
+        return JsonResponse({"animal_id": FALLBACK_UNKNOWN_ID, "confidence": "fallback", "matched": ""})
+
+    # 프로젝트 실데이터 기준: name_kor / name_eng 필드 사용
+    alias_map = {
+        # EN → KO 대표명(필요시 확장)
+        "water deer": "고라니",
+        "water-deer": "고라니",
+        "water dear": "고라니",
+        "roe deer": "노루",
+        "wild boar": "멧돼지",
+        "raccoon": "너구리",
+        "chipmunk": "청설모",
+        "squirrel": "다람쥐",
+        "black bear": "반달가슴곰",
+        "hare": "토끼",
+        "weasel": "족제비",
+        "heron": "왜가리",
+        "egret": "중대백로",
+        "dog": "개",
+        "cat": "고양이",
+    }
+
+    candidates = [label]
+    if label in alias_map:
+        candidates.append(_norm_text(alias_map[label]))
+
+    def query_any(terms, lookups):
+        qs = Animal.objects.all()
+        for term in terms:
+            q = Q()
+            for lk in lookups:
+                q |= Q(**{lk: term})
+            obj = qs.filter(q).first()
+            if obj:
+                return obj, term
+        return None, None
+
+    # 우선순위: exact → alias-exact → startswith → contains
+    exact_lookups = ["name_kor__iexact", "name_eng__iexact"]
+    starts_lookups = ["name_kor__istartswith", "name_eng__istartswith"]
+    contains_lookups = ["name_kor__icontains", "name_eng__icontains"]
+
+    obj, matched = query_any([candidates[0]], exact_lookups)
+    if obj:
+        return JsonResponse({"animal_id": obj.id, "confidence": "exact", "matched": matched})
+
+    if len(candidates) > 1:
+        obj, matched = query_any([candidates[1]], exact_lookups)
+        if obj:
+            return JsonResponse({"animal_id": obj.id, "confidence": "alias", "matched": matched})
+
+    obj, matched = query_any(candidates, starts_lookups)
+    if obj:
+        return JsonResponse({"animal_id": obj.id, "confidence": "startswith", "matched": matched})
+
+    obj, matched = query_any(candidates, contains_lookups)
+    if obj:
+        return JsonResponse({"animal_id": obj.id, "confidence": "contains", "matched": matched})
+
+    return JsonResponse({"animal_id": FALLBACK_UNKNOWN_ID, "confidence": "fallback", "matched": ""})
 
 # ---------- 무인증 신고 ----------
 class ReportNoAuthView(APIView):
@@ -1187,7 +1274,12 @@ def dashboard_report_stats(request):
 
     qs = Report.objects.all()
     total = qs.count()
-    today = qs.filter(report_date__gte=start_today).count()
+
+    field = Report._meta.get_field('report_date')
+    if isinstance(field, DateTimeField):
+        today = qs.filter(report_date__gte=start_today).count()
+    else:
+        today = qs.filter(report_date__gte=start_today.date()).count()
 
     UNRESOLVED = ("처리중", "접수", "미처리", "대기")
     unresolved = qs.filter(status__in=UNRESOLVED).count()
@@ -1251,6 +1343,7 @@ def dashboard_reports(request):
             "status": r.status,
             "created_at": timezone.localtime(r.report_date).strftime("%Y-%m-%d %H:%M"),
             "reporter": (r.user.username if r.user_id else ""),
+            "photo_url": _abs_media_url(request, getattr(r, "image", None)),
         }
 
     return JsonResponse({
@@ -1264,14 +1357,83 @@ def dashboard_reports(request):
 @_require_login_json
 def dashboard_reporters(request):
     limit = int(request.GET.get("limit") or 10)
-    agg = (Report.objects
-           .values("user__username")
-           .annotate(cnt=Count("id"))
-           .order_by("-cnt")[:limit])
+    agg = (
+        Report.objects
+        .values("user__username")
+        .annotate(cnt=Count("id"))
+        .order_by("-cnt", "user__username")[:limit]
+    )
 
-    data = [{
-        "reporter": (row["user__username"] or "(알수없음)"),
-        "count": row["cnt"]
-    } for row in agg]
+    data = []
+    for row in agg:
+        reporter = (row["user__username"] or "(알수없음)")
+        data.append({
+            "reporter": reporter,  # ✅ 표준 키
+            "name": reporter,      # ✅ 임시 호환용(프론트가 r.name을 볼 수도 있으니)
+            "count": row["cnt"],
+        })
 
     return JsonResponse({"results": data})
+
+@require_GET
+@_require_login_json
+def dashboard_report_points(request):
+    """
+    GET /api/dashboard/report-points/?year=2025&animal=고라니
+    응답 예:
+    [
+      {"lat":37.5446,"lng":127.0372,"count":3,"city":"서울","district":"성동구","region":"서울숲","address":"..."},
+      ...
+    ]
+    """
+    year   = request.GET.get("year")
+    animal = (request.GET.get("animal") or "").strip()
+    city   = (request.GET.get("city") or "").strip()
+    dist   = (request.GET.get("district") or "").strip()
+
+    qs = (Report.objects
+          .select_related("location","animal")
+          .exclude(location__isnull=True))
+
+    # 연도 필터
+    if year and year.isdigit():
+        qs = qs.annotate(y=ExtractYear("report_date")).filter(y=int(year))
+
+    # 동물명(별칭 안전 처리)
+    name_field = _animal_name_field(Report)  # 'animal__name_kor' | 'animal__name' | None
+    if animal and name_field:
+        qs = qs.filter(**{f"{name_field}__iexact": animal})
+
+    # 지역(시/구) 보조 필터
+    if city:
+        qs = qs.filter(location__city__icontains=city)
+    if dist:
+        qs = qs.filter(location__district__icontains=dist)
+
+    # 지점(Location)별 카운트
+    rows = (qs.values(
+                "location_id",
+                "location__latitude", "location__longitude",
+                "location__city", "location__district",
+                "location__region", "location__address",
+            )
+            .annotate(count=Count("id"))
+            .order_by("-count", "location_id"))
+
+    data = []
+    for r in rows:
+        lat = r["location__latitude"]
+        lng = r["location__longitude"]
+        if lat is None or lng is None:
+            continue
+        data.append({
+            "lat": float(lat),
+            "lng": float(lng),
+            "count": r["count"],
+            "city": (r["location__city"] or "").strip(),
+            "district": (r["location__district"] or "").strip(),
+            "region": (r["location__region"] or "").strip(),
+            "address": (r["location__address"] or "").strip(),
+        })
+    return JsonResponse(data, safe=False)
+

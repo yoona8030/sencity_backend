@@ -1,16 +1,55 @@
-/* 레이아웃 */
+/* ========== 레이아웃 공통 ========== */
 
 .dash {
     padding: 24px;
 }
 
 
-/* 액션 버튼 */
+/* ========== 헤더 ========== */
 
-.dash__actions {
-    display: flex;
+.dash__header {
+    margin-bottom: 12px;
+}
+
+.page-title {
+    margin: 0;
+    font-size: 36px;
+    line-height: 1.2;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+}
+
+
+/* 제목 아래 줄: 자막(좌) + 버튼(우) → Grid */
+
+.dash__meta {
+    /* 핵심: Grid 두 칸(자막 1fr | 버튼 auto) */
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: end;
+    column-gap: 12px;
+    margin-top: 6px;
+}
+
+.page-subtitle {
+    margin: 0;
+    color: #666;
+    min-width: 0;
+    /* 긴 문장 줄바꿈/말줄임 대비 */
+    overflow-wrap: anywhere;
+}
+
+
+/* 버튼 묶음: 기본 4열 한 줄, 우측 정렬 */
+
+.actions {
+    display: grid;
+    grid-auto-rows: 36px;
+    grid-template-columns: repeat(4, max-content);
     gap: 8px;
-    flex-wrap: wrap;
+    justify-content: end;
+    /* 오른쪽 끝 정렬 */
+    align-content: end;
 }
 
 .btn {
@@ -24,6 +63,8 @@
     background: #fff;
     font-weight: 600;
     color: #222;
+    white-space: nowrap;
+    /* 버튼 내부 줄바꿈 방지 */
 }
 
 .btn:hover {
@@ -31,7 +72,33 @@
 }
 
 
-/* 링크(중립) */
+/* 화면이 줄면 버튼을 2×2(두 줄)로 전환 */
+
+@media (max-width: 1200px) {
+    .actions {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        /* 2열 */
+        justify-content: stretch;
+    }
+    .actions .btn {
+        width: 100%;
+        justify-content: center;
+    }
+}
+
+
+/* 아주 좁아지면(모바일) 자막 위, 버튼 아래로 쌓기 */
+
+@media (max-width: 640px) {
+    .dash__meta {
+        grid-template-columns: 1fr;
+        row-gap: 8px;
+        align-items: start;
+    }
+}
+
+
+/* ========== 링크(중립) ========== */
 
 .link {
     color: #333;
@@ -44,7 +111,7 @@
 }
 
 
-/* 서버 배너 */
+/* ========== 서버 배너 ========== */
 
 .dash__banner {
     display: flex;
@@ -62,7 +129,7 @@
 }
 
 
-/* 카드 */
+/* ========== 카드 공통 ========== */
 
 .card {
     background: #fff;
@@ -89,7 +156,7 @@
 }
 
 
-/* 그리드 */
+/* ========== 그리드 ========== */
 
 .grid {
     display: grid;
@@ -106,62 +173,28 @@
     gap: 16px;
 }
 
-
-/* ===== 헤더: 제목 아래 줄에 자막(좌) + 버튼(우) ===== */
-
-.dash__header {
-    margin-bottom: 12px;
-}
-
-.page-title {
-    margin: 0;
-    font-size: 36px;
-    line-height: 1.2;
-    font-weight: 800;
-    letter-spacing: -0.02em;
-}
-
-
-/* 자막과 버튼을 한 줄로 배치 */
-
-.dash__meta {
-    margin-top: 6px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    /* 자막은 왼쪽, 버튼은 오른쪽 끝 */
-    gap: 12px;
-}
-
-.dash__meta .page-subtitle {
-    margin: 0;
-    color: #666;
-    flex: 1 1 auto;
-    /* 긴 문장도 자연스럽게 줄바꿈 */
-}
-
-.dash__meta .actions {
-    flex: 0 0 auto;
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-}
-
-
-/* 좁은 화면에서는 세로로 쌓이게 */
-
-@media (max-width: 720px) {
-    .dash__meta {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 8px;
-    }
-}
-
 @media (max-width: 1200px) {
     .grid--main {
         grid-template-columns: 1fr;
     }
+}
+
+
+/* ========== KPI 영역 (Flex) ========== */
+
+.grid--kpi {
+    display: flex;
+    gap: 16px;
+    margin-top: 18px;
+}
+
+.grid--kpi>.kpi {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.grid--kpi .card+.card {
+    margin-top: 0;
 }
 
 @media (max-width: 900px) {
@@ -173,67 +206,36 @@
     }
 }
 
-.grid--kpi {
-    display: flex;
-    /* ← 핵심 */
-    gap: 16px;
-    margin-top: 18px;
-}
 
-.grid--kpi>.kpi {
-    flex: 1 1 0;
-    /* 네 카드 동일한 너비 */
-    min-width: 0;
-    /* 텍스트로 인한 튐 방지 */
-}
-
-.grid--kpi .card+.card {
-    margin-top: 0;
-}
+/* KPI 카드 내부 정렬 */
 
 .kpi,
 .kpi * {
     box-sizing: border-box;
 }
 
-
-/* 브라우저별 라운딩 차이 제거 */
-
 .kpi {
     height: 140px;
-    /* 4장 동일 고정 높이 */
     display: flex;
     flex-direction: column;
-    /* 3슬롯 수직 배치 */
     padding: 16px;
 }
 
-
-/* 1) 라벨 */
-
 .kpi__label {
     height: 22px;
-    /* 정확한 픽셀 */
     line-height: 22px;
-    /* 텍스트 baseline 통일 */
     font-size: 14px;
     color: #666;
     font-weight: 600;
     display: block;
 }
 
-
-/* 2) 값(중앙) */
-
 .kpi__value {
     flex: 1;
-    /* 가운데 영역을 남는 높이 전부 사용 */
     display: flex;
     align-items: center;
-    /* 수직 중앙 */
     justify-content: flex-start;
     line-height: 1;
-    /* 글자 잘림 방지 */
     font-size: 30px;
     font-weight: 800;
     color: #111;
@@ -245,9 +247,6 @@
     font-weight: 700;
     color: #666;
 }
-
-
-/* 3) 힌트 */
 
 .kpi__hint {
     height: 22px;
@@ -263,8 +262,6 @@
     display: inline-block;
     height: 22px;
     line-height: 22px;
-    text-decoration: none;
-    color: inherit;
 }
 
 .kpi__hint .link:hover {
@@ -272,7 +269,7 @@
 }
 
 
-/* 라이브 */
+/* ========== 라이브 ========== */
 
 .live__body {
     display: grid;
@@ -302,7 +299,7 @@
 }
 
 
-/* 공지 */
+/* ========== 공지 ========== */
 
 .notice__list {
     list-style: none;
@@ -349,7 +346,7 @@
 }
 
 
-/* TOP 사용자 */
+/* ========== TOP 사용자 ========== */
 
 .top-users__list {
     list-style: none;
@@ -373,7 +370,7 @@
 }
 
 
-/* 테이블 */
+/* ========== 테이블 ========== */
 
 .table__wrap {
     overflow: auto;
@@ -411,7 +408,7 @@
 }
 
 
-/* 상태 배지 */
+/* ========== 상태 배지 ========== */
 
 .badge {
     display: inline-block;

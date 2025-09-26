@@ -13,6 +13,7 @@
 </head>
 
 <body>
+    {% firstof request.resolver_match.url_name "" as urlname %}
     <div class="container">
         <aside class="sidebar">
             <div class="sidebar-brand">관리자 페이지</div>
@@ -27,36 +28,45 @@
             <nav class="sidebar-menu">
                 <div class="menu-group">사이트 관리</div>
 
-                <a href="{% url 'dashboard:home' %}" class="menu-item">
+                <a href="{% url 'dashboard:home' %}" class="menu-item{% if urlname == 'home' %} active{% endif %}">
                     <i class="fa-solid fa-th-large"></i> 대시보드
                 </a>
-                <a href="{% url 'dashboard:cctv' %}" class="menu-item">
+
+                {% with prefix=urlname|slice:":4" %}
+                <a href="{% url 'dashboard:cctv' %}" class="menu-item{% if urlname == 'cctv' or prefix == 'cctv' %} active{% endif %}">
                     <i class="fa-solid fa-camera"></i> CCTV 관리
                 </a>
-                <a href="{% url 'dashboard:reports' %}" class="menu-item">
+                {% endwith %}
+
+                <a href="{% url 'dashboard:reports' %}" class="menu-item{% if urlname == 'reports' %} active{% endif %}">
                     <i class="fa-solid fa-tv"></i> 신고 처리 및 관리
                 </a>
-                <a href="{% url 'dashboard:settings' %}" class="menu-item">
+
+                <a href="{% url 'dashboard:settings' %}" class="menu-item{% if urlname == 'settings' %} active{% endif %}">
                     <i class="fa-solid fa-gear"></i> 설정
                 </a>
-                <a href="{% url 'dashboard:users' %}" class="menu-item">
+
+                <a href="{% url 'dashboard:users' %}" class="menu-item{% if urlname == 'users' %} active{% endif %}">
                     <i class="fa-solid fa-user"></i> 사용자 관리
                 </a>
 
                 <div class="menu-group">콘텐츠 및 통계</div>
-                <a href="{% url 'dashboard:analytics' %}" class="menu-item">
+
+                <a href="{% url 'dashboard:analytics' %}" class="menu-item{% if urlname == 'analytics' %} active{% endif %}">
                     <i class="fa-solid fa-chart-column"></i> 데이터 분석 및 통계
                 </a>
-                <a href="{% url 'dashboard:contents' %}" class="menu-item">
+
+                <a href="{% url 'dashboard:contents' %}" class="menu-item{% if urlname == 'contents' %} active{% endif %}">
                     <i class="fa-solid fa-file-lines"></i> 콘텐츠 관리
                 </a>
-                <a href="{% url 'dashboard:notices' %}" class="menu-item">
+
+                <a href="{% url 'dashboard:notices' %}" class="menu-item{% if urlname == 'notices' %} active{% endif %}">
                     <i class="fa-solid fa-bell"></i> 공지 설정
                 </a>
             </nav>
         </aside>
 
-        <main class="main-content">{% block content %}{% endblock %}{% block body %}{% endblock %}</main>
+        <main class="main-content">{% block content %}{% endblock %} {% block body %}{% endblock %}</main>
     </div>
 </body>
 

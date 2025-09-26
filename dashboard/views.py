@@ -7,6 +7,8 @@ from datetime import time, datetime
 from functools import wraps
 
 from django.shortcuts import render
+from django.views.decorators.clickjacking import xframe_options_sameorigin
+from django.shortcuts import redirect
 from django.http import JsonResponse, StreamingHttpResponse, HttpResponseBadRequest
 from django.contrib.auth.decorators import user_passes_test, login_required
 from django.contrib.auth import get_user_model
@@ -923,6 +925,71 @@ def api_users(request):
         "results": results,
     }
     return JsonResponse(data)
+
+# ====== 콘텐츠 편집기(신규) ======
+@user_passes_test(_is_staff)
+def page_content_new(request):
+    """
+    /dashboard/contents/new/?template=weekly 같은 식으로 진입
+    """
+    template_key = (request.GET.get("template") or "").strip() or "blank"
+    ctx = {
+        "mode": "new",
+        "content_id": None,
+        "template_key": template_key,
+        "title": "새 콘텐츠 만들기",
+    }
+    return render(request, "dashboard/content_editor.html", ctx)
+
+# ====== 콘텐츠 편집기(수정) ======
+@user_passes_test(_is_staff)
+def page_content_edit(request, content_id: int):
+    """
+    실제 DB 연동 전: content_id만 넘겨서 편집기 열어줌
+    """
+    ctx = {
+        "mode": "edit",
+        "content_id": content_id,
+        "template_key": request.GET.get("template") or "unknown",
+        "title": f"콘텐츠 편집 #{content_id}",
+    }
+    return render(request, "dashboard/content_editor.html", ctx)
+
+# ====== 템플릿 미리보기 (iframe 허용) ======
+@user_passes_test(_is_staff)
+@xframe_options_sameorigin   # ← iframe 에서 열 수 있게
+def page_content_preview(request, template_key: str):
+    """
+    /dashboard/contents/preview/<template_key>/
+    template_key: new-card | weekly | safety | event | ...
+    """
+    # 아주 간단한 프리뷰 데이터
+    samples = {
+        "new-card": {
+            "title": "신규 기능 카드",
+            "body": "새로 추가된 기능을 소개하는 카드입니다. 3줄 요약 + 자세히 보기.",
+        },
+        "weekly": {
+            "title": "주간 통계 하이라이트",
+            "body": "핵심 지표 3개와 라인차트를 요약해 보여줍니다.",
+        },
+        "safety": {
+            "title": "안전 수칙 카드",
+            "body": "야간 이동 시 밝은 곳을 이용하세요. 분실물은 즉시 신고!",
+        },
+        "event": {
+            "title": "이벤트 안내",
+            "body": "일시/장소/신청 버튼이 포함된 카드입니다.",
+        },
+    }
+    data = samples.get(template_key, {
+        "title": "미리보기",
+        "body": "해당 템플릿 키에 대한 샘플이 없습니다.",
+    })
+    return render(request, "dashboard/template_preview.html", {
+        "template_key": template_key,
+        "data": data,
+    })
 
 # ─────────────────────────────────────
 # 통계 API

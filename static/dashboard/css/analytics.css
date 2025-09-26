@@ -1,22 +1,19 @@
 :root {
     --card-pad: 12px;
-    --chart-h: 220px;
-    /* 바/선 */
-    --mini-h: 180px;
+    --radius: 12px;
+    --gap: 16px;
+    --h-small: 240px;
     /* 도넛 */
-    --donut-h: 180px;
+    --h-wide-short: 320px;
+    /* 가로 막대 */
+    --h-map: 460px;
+    /* 지도 */
+    --h-line: 280px;
+    /* 선 그래프 */
 }
 
 
-/* ─────────────────────────────────────
-   레이아웃(사이드바 간격 통일)
-   ───────────────────────────────────── */
-
-.page-analytics .main-content {
-    /* ❗기존 260px 고정값 → 대시보드 전역 변수로 통일 */
-    margin-left: var(--sidebar-w) !important;
-    min-width: 0;
-}
+/* 여백/헤더 */
 
 .wrap {
     padding: 12px 20px 24px;
@@ -28,15 +25,86 @@
     font-weight: 800;
 }
 
+.page-header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 18px;
+}
+
+.page-subtitle {
+    margin: 6px 0 0;
+    color: #666;
+}
+
+.page-tools {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 2px;
+}
+
+.page-tools select {
+    height: 36px;
+    padding: 0 10px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background: #fff;
+}
+
+
+/* ▼ 전역 버튼 스타일: 적용/고정 모두 동일 룩 */
+
+.btn {
+    height: 36px;
+    padding: 0 14px;
+    border-radius: 10px;
+    border: 1px solid #ddd;
+    background: #fff;
+    font-weight: 600;
+    color: #222;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.btn:hover {
+    background: #f9fafb;
+}
+
+.btn:focus {
+    outline: 2px solid #111;
+    outline-offset: 2px;
+}
+
+
+/* 시각장애인용 숨김 텍스트 */
+
+.sr-only {
+    position: absolute !important;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
 
 /* 카드 */
 
 .card {
     background: #fff;
     border: 1px solid #e5e7eb;
-    border-radius: 12px;
+    border-radius: var(--radius);
     padding: var(--card-pad);
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
 }
 
 .card h2 {
@@ -45,9 +113,7 @@
 }
 
 
-/* ─────────────────────────────────────
-   KPI
-   ───────────────────────────────────── */
+/* KPI */
 
 .kpis {
     display: grid;
@@ -68,118 +134,118 @@
 }
 
 
-/* ─────────────────────────────────────
-   3열 카드
-   ───────────────────────────────────── */
+/* 그리드 */
 
-.cards3 {
+.analytics-grid {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    gap: var(--gap);
+    align-items: stretch;
 }
 
-.chart-box {
+
+/* 데스크톱 */
+
+@media (min-width: 1280px) {
+    .card--bar {
+        grid-column: span 8;
+        min-height: var(--h-wide-short);
+    }
+    .card--donut-right {
+        grid-column: span 4;
+        min-height: var(--h-small);
+    }
+    .card--map {
+        grid-column: span 6;
+        min-height: var(--h-map);
+    }
+    .card--line {
+        grid-column: span 6;
+        min-height: var(--h-line);
+    }
+}
+
+
+/* 노트북 */
+
+@media (max-width: 1279.98px) and (min-width: 1024px) {
+    .card--bar {
+        grid-column: span 7;
+    }
+    .card--donut-right {
+        grid-column: span 5;
+    }
+    .card--map {
+        grid-column: span 6;
+    }
+    .card--line {
+        grid-column: span 6;
+    }
+}
+
+
+/* 태블릿 이하 */
+
+@media (max-width: 1023.98px) {
+    .analytics-grid {
+        grid-template-columns: repeat(6, 1fr);
+    }
+    .card--bar,
+    .card--donut-right,
+    .card--map,
+    .card--line {
+        grid-column: 1 / -1;
+    }
+}
+
+
+/* 차트 공통 */
+
+.chart {
     position: relative;
-    height: var(--chart-h);
+    width: 100%;
+    height: 100%;
+    min-height: 180px;
 }
 
-.chart-box canvas {
+.chart canvas {
     width: 100% !important;
     height: 100% !important;
-}
-
-
-/* ==== 차트 툴팁 ==== */
-
-.chart-tip {
-    position: fixed;
-    z-index: 9999;
-    display: none;
-    pointer-events: none;
-    padding: 6px 8px;
-    border-radius: 8px;
-    background: rgba(17, 17, 17, 0.92);
-    color: #fff;
-    font-size: 12px;
-    line-height: 1.35;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
-    max-width: 280px;
-    white-space: pre-line;
-}
-
-
-/* ─────────────────────────────────────
-   도넛 2개: 제목/차트/범례 3행 그리드
-   ───────────────────────────────────── */
-
-.donut-pair {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-}
-
-.mini-chart-box {
-    position: relative;
-    height: auto;
-    /* 고정높이 해제 */
-    display: grid;
-    /* 제목 / 캔버스 / 범례 3단 */
-    grid-template-rows: auto var(--donut-h) auto;
-    align-content: start;
-    /* 범례가 커져도 위쪽부터 배치 */
-    min-height: 0;
-    /* 내부 스크롤 이슈 방지 */
-}
-
-.mini-title {
-    font-weight: 700;
-    margin: 0 0 4px;
-}
-
-.mini-chart-box canvas {
     display: block;
-    /* 인라인 여백 제거 */
-    width: 100% !important;
-    height: var(--donut-h) !important;
+}
+
+.chart--line {
+    min-height: var(--h-line);
 }
 
 
-/* 범례 컨테이너: 카드 내부 스크롤 */
+/* 도넛: 좌 캔버스 / 우 세로 범례 */
 
-#legend-animal,
-#legend-region {
-    margin-top: 10px;
-    max-height: 96px;
-    /* 항목 많을 때 내부 스크롤 */
-    overflow: auto;
-    padding-right: 6px;
-    /* 스크롤 여백 */
-}
-
-
-/* 컨테이너 자체가 .legend인 케이스를 정확히 타겟 */
-
-#legend-animal.legend,
-#legend-region.legend {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-content: start;
-}
-
-#legend-animal .legend-item,
-#legend-region .legend-item {
-    display: inline-flex;
+.donut-split {
+    display: grid;
+    grid-template-columns: 1.15fr 118px;
+    gap: 8px;
     align-items: center;
-    gap: 6px;
-    font-size: 12px;
-    margin-right: 12px;
-    margin-bottom: 6px;
+    min-height: calc(var(--h-small) + 12px);
 }
 
+.donut-split canvas {
+    width: 100% !important;
+    height: auto !important;
+    aspect-ratio: 1/1;
+}
 
-/* 범례 아이템 공통 */
-
-.legend-item {
+.legend--right {
     display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-height: calc(var(--h-small) + 8px);
+    overflow: auto;
+    padding-right: 2px;
+}
+
+.legend--right .legend-item {
+    display: inline-flex;
     align-items: center;
     gap: 6px;
     font-size: 12px;
@@ -187,7 +253,7 @@
     white-space: nowrap;
 }
 
-.legend-swatch {
+.legend--right .legend-swatch {
     width: 10px;
     height: 10px;
     border-radius: 50%;
@@ -195,95 +261,74 @@
 }
 
 
-/* ─────────────────────────────────────
-   전역 툴바 (HTML 인라인 → CSS로 이관)
-   ───────────────────────────────────── */
+/* 지도 + Leaflet */
 
-
-/* ===== 공통 페이지 헤더(제목 + 우측 툴바) ===== */
-
-.page-header {
+.imgmap-toolbar {
     display: flex;
-    align-items: flex-end;
-    /* 하단 기준으로 가지런히 */
-    justify-content: space-between;
-    gap: 16px;
-    margin-bottom: 18px;
-    /* 아래 카드들과 간격 통일 */
-}
-
-.page-title {
-    margin: 0;
-    /* 마진 병합 방지 */
-    line-height: 1.25;
-}
-
-.page-subtitle {
-    margin: 6px 0 0 0;
-    color: #666;
-}
-
-.page-tools {
-    display: flex;
-    align-items: center;
     gap: 8px;
-    margin-bottom: 2px;
-    /* 제목 베이스라인과 시각적으로 맞춤 */
+    align-items: center;
+    margin: 0 2px 8px;
 }
 
-.page-tools select {
-    height: 36px;
-    padding: 0 10px;
-    border: 1px solid #ddd;
-    border-radius: 8px;
-    background: #fff;
+.leaflet-wrap {
+    position: relative;
+    width: 100%;
+    min-height: 420px;
+    height: var(--h-map);
 }
 
-.page-tools .btn {
-    height: 36px;
-    padding: 0 14px;
-    border-radius: 10px;
-    border: 1px solid #ddd;
-    background: #fff;
-    font-weight: 600;
-    color: #222;
-}
-
-
-/* 스크린리더 전용 라벨 */
-
-.sr-only {
-    position: absolute !important;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
+#leafletMap {
+    width: 100%;
+    height: 100%;
+    border-radius: var(--radius);
     overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
 }
 
-.global-toolbar .spacer {
-    flex: 1 1 auto;
-}
-
-.global-toolbar select,
-.global-toolbar button {
-    height: 34px;
+.leaflet-container {
+    font: inherit;
 }
 
 
-/* ─────────────────────────────────────
-   모달 (HTML 인라인 → CSS로 이관)
-   ───────────────────────────────────── */
+/* 지도 우측 세로 컬러바 */
+
+.legend--map-vertical {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    background: rgba(255, 255, 255, 0.9);
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 8px;
+    z-index: 2;
+    font-size: 12px;
+    color: #333;
+}
+
+.legend-bar-vertical {
+    width: 12px;
+    height: 140px;
+    border-radius: 6px;
+    background: linear-gradient(to top, rgba(59, 130, 246, 0.1), rgba(59, 130, 246, 0.9));
+}
+
+.legend-max,
+.legend-min {
+    line-height: 1;
+}
+
+
+/* 모달 */
 
 .modal-mask {
     position: fixed;
     inset: 0;
     background: rgba(0, 0, 0, 0.3);
     display: none;
-    /* JS로 'flex' 토글 */
     align-items: center;
     justify-content: center;
     z-index: 1000;
@@ -332,38 +377,11 @@
 }
 
 
-/* ─────────────────────────────────────
-   반응형
-   ───────────────────────────────────── */
-
-@media (max-width: 980px) {
-    #legend-animal,
-    #legend-region {
-        max-height: 72px;
-    }
-}
-
-@media (max-width: 1200px) {
-     :root {
-        --chart-h: 200px;
-        --mini-h: 160px;
-        --donut-h: 160px;
-        /* 추가 */
-    }
-}
+/* 반응형 세부 */
 
 @media (max-width: 980px) {
     .kpis {
         grid-template-columns: repeat(2, 1fr);
-    }
-    .cards3 {
-        grid-template-columns: 1fr 1fr;
-    }
-     :root {
-        --chart-h: 180px;
-        --mini-h: 150px;
-        --donut-h: 150px;
-        /* 추가 */
     }
 }
 
@@ -371,16 +389,47 @@
     .kpis {
         grid-template-columns: 1fr;
     }
-    .cards3 {
-        grid-template-columns: 1fr;
-    }
-    .donut-pair {
-        grid-template-columns: 1fr;
-    }
-     :root {
-        --chart-h: 180px;
-        --mini-h: 170px;
-        --donut-h: 170px;
-        /* 추가 */
-    }
+}
+
+
+/* === 지도 고정 관련 시각 피드백(오버레이/줌컨트롤 흐림)만 유지 === */
+
+.leaflet-wrap.locked {
+    cursor: not-allowed;
+}
+
+.leaflet-wrap.locked::after {
+    content: '고정됨';
+    position: absolute;
+    right: 12px;
+    top: 12px;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    font-size: 12px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    z-index: 3;
+}
+
+.leaflet-wrap.locked .leaflet-control-zoom {
+    opacity: 0.35;
+    pointer-events: none;
+}
+
+
+/* 지도 마커 툴팁 */
+
+.leaflet-tooltip.map-tip {
+    background: #111;
+    color: #fff;
+    border: 0;
+    border-radius: 8px;
+    padding: 6px 8px;
+    font-size: 12px;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+}
+
+.leaflet-tooltip.map-tip:before {
+    display: none;
+    /* 기본 꼬리 제거(취향) */
 }

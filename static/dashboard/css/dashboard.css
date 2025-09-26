@@ -109,6 +109,15 @@ body {
     gap: 4px;
 }
 
+.sidebar .menu-item.active {
+    background: #111;
+    color: #fff;
+}
+
+.sidebar .menu-item.active i {
+    color: #fff;
+}
+
 .menu-group {
     padding: 6px 14px;
     font-size: 0.8rem;

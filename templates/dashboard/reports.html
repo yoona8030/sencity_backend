@@ -17,7 +17,7 @@
     <link rel="stylesheet" href="{% static 'dashboard/css/dashboard.css' %}?v=fit-2025-09-19" />
 
     <!-- 이 화면 전용 스타일 -->
-    <link rel="stylesheet" href="{% static 'dashboard/css/reports.css' %}?v=2025-09-19" />
+    <link rel="stylesheet" href="{% static 'dashboard/css/reports.css' %}?v=2025-09-19-bpanel" />
 </head>
 
 <body class="page-reports">
@@ -123,6 +123,48 @@
         </main>
     </div>
 
+    <!-- ▼▼▼ B안: 오른쪽 슬라이드 프리뷰 패널 ▼▼▼ -->
+    <aside id="report-preview" class="report-preview" aria-hidden="true">
+        <button class="close" id="preview-close" aria-label="닫기">
+        <i class="fa-solid fa-xmark"></i>
+      </button>
+        <div class="preview-body">
+            <div class="img-wrap">
+                <img id="preview-img" alt="신고 사진" />
+            </div>
+            <div class="meta">
+                <div>
+                    <strong>ID</strong>
+                    <span id="pv-id">-</span>
+                </div>
+                <div>
+                    <strong>동물</strong>
+                    <span id="pv-animal">-</span>
+                </div>
+                <div>
+                    <strong>사용자</strong>
+                    <span id="pv-user">-</span>
+                </div>
+                <div>
+                    <strong>지역</strong>
+                    <span id="pv-loc">-</span>
+                </div>
+                <div>
+                    <strong>상태</strong>
+                    <span id="pv-stat">-</span>
+                </div>
+                <div>
+                    <strong>일시</strong>
+                    <span id="pv-time">-</span>
+                </div>
+            </div>
+            <div class="actions">
+                <a id="pv-link" class="btn-link" href="#" target="_self" rel="noopener">자세히 보기</a>
+            </div>
+        </div>
+    </aside>
+    <!-- ▲▲▲ 프리뷰 패널 끝 ▲▲▲ -->
+
     <!-- 전용 스크립트 -->
     <script>
         /* ===== API 엔드포인트 ===== */
@@ -139,12 +181,24 @@
             reporters: () => document.getElementById('reporters'),
             q: () => document.getElementById('q'),
             searchBtn: () => document.getElementById('search'),
+            panel: () => document.getElementById('report-preview'),
+            closeBtn: () => document.getElementById('preview-close'),
+            pvImg: () => document.getElementById('preview-img'),
+            pv: () => ({
+                id: document.getElementById('pv-id'),
+                animal: document.getElementById('pv-animal'),
+                user: document.getElementById('pv-user'),
+                loc: document.getElementById('pv-loc'),
+                stat: document.getElementById('pv-stat'),
+                time: document.getElementById('pv-time'),
+                link: document.getElementById('pv-link'),
+            }),
         };
 
         /* ===== 공통 유틸 ===== */
         function htmlEscape(s = '') {
             return s.replace(
-                /[&<>"']/g,
+                /[&<>\"']/g,
                 (m) =>
                 ({
                     '&': '&amp;',
@@ -163,10 +217,7 @@
             const r = await fetch(url, {
                 credentials: 'same-origin',
             });
-            if (!r.ok) {
-                const msg = await r.text().catch(() => r.statusText);
-                throw new Error(`HTTP ${r.status} ${msg}`);
-            }
+            if (!r.ok) throw new Error(`HTTP ${r.status} ${await r.text().catch(() => r.statusText)}`);
             return r.json();
         }
 
@@ -193,60 +244,108 @@
             els.total().textContent = '…';
             els.today().textContent = '…';
             els.unresolved().textContent = '…';
-
             const d = await fetchJSON(API_REPORT_STATS);
-
-            /* ⬇️ nullish 연산자(??) 대신 삼항으로 안전 처리 */
             els.total().textContent = d.total != null ? d.total : 0;
             els.today().textContent = d.today != null ? d.today : 0;
             els.unresolved().textContent = d.unresolved != null ? d.unresolved : 0;
         }
 
+        /* ===== 프리뷰 패널 제어 ===== */
+        function openPreview(data) {
+            const panel = els.panel();
+            const {
+                id,
+                animal,
+                reporter,
+                region,
+                status,
+                created_at,
+                photo_url
+            } = data || {};
+            const pv = els.pv();
+
+            // 이미지
+            const src = photo_url || '{% static "dashboard/images/placeholder-4x3.png" %}';
+            els.pvImg().src = src;
+            els.pvImg().alt = (animal || '신고') + ' 사진';
+
+            // 메타
+            pv.id.textContent = id != null ? id : '-';
+            pv.animal.textContent = animal || '-';
+            pv.user.textContent = reporter || '-';
+            pv.loc.textContent = region || '-';
+            pv.stat.textContent = status || '-';
+            pv.time.textContent = created_at || '-';
+            pv.link.href = detailUrl(id);
+
+            panel.classList.add('on');
+            panel.setAttribute('aria-hidden', 'false');
+        }
+
+        function closePreview() {
+            const panel = els.panel();
+            panel.classList.remove('on');
+            panel.setAttribute('aria-hidden', 'true');
+        }
+
         /* ===== 리스트 렌더 ===== */
         function renderTable(d) {
             const rows = (d.results || [])
-                .map(
-                    (r) => `
-          <tr data-id="${r.id}">
-            <td>${r.id}</td>
-            <td>${htmlEscape(r.animal || '')}</td>
-            <td>${htmlEscape(r.reporter || '')}</td>
-            <td>${htmlEscape(r.region || '')}</td>
-            <td>${statusBadge(r.status)}</td>
-          </tr>
-        `
-                )
+                .map((r) => {
+                    // 클릭 시 사용할 데이터(패널용)
+                    const dataAttr = [
+                        `data-id="${r.id}"`,
+                        `data-animal="${htmlEscape(r.animal || '')}"`,
+                        `data-reporter="${htmlEscape(r.reporter || '')}"`,
+                        `data-region="${htmlEscape(r.region || '')}"`,
+                        `data-status="${htmlEscape(r.status || '')}"`,
+                        `data-created="${htmlEscape(r.created_at || '')}"`,
+                        `data-photo="${htmlEscape(r.photo_url || '')}"`,
+                    ].join(' ');
+                    return `
+                    <tr class="report-row" ${dataAttr}>
+                        <td>${r.id}</td>
+                        <td>${htmlEscape(r.animal || '')}</td>
+                        <td>${htmlEscape(r.reporter || '')}</td>
+                        <td>${htmlEscape(r.region || '')}</td>
+                        <td>${statusBadge(r.status)}</td>
+                    </tr>
+                `;
+                })
                 .join('');
 
             const pager =
                 d.total_pages > 1 ?
                 `
-          <div class="pager">
-            <button data-pg="${Math.max(1, (d.page || 1) - 1)}" ${d.page <= 1 ? 'disabled' : ''}>이전</button>
-            <span class="pageno">${d.page} / ${d.total_pages}</span>
-            <button data-pg="${Math.min(d.total_pages, (d.page || 1) + 1)}" ${d.page >= d.total_pages ? 'disabled' : ''}>다음</button>
-          </div>` :
+                <div class="pager">
+                    <button data-pg="${Math.max(1, (d.page || 1) - 1)}" ${d.page <= 1 ? 'disabled' : ''}>이전</button>
+                    <span class="pageno">${d.page} / ${d.total_pages}</span>
+                    <button data-pg="${Math.min(d.total_pages, (d.page || 1) + 1)}" ${
+                d.page >= d.total_pages ? 'disabled' : ''
+              }>다음</button>
+                </div>` :
                 '';
 
             document.getElementById('report-list').innerHTML = `
-          <table class="table">
-            <colgroup>
-              <col style="width:8ch" />
-              <col style="width:12ch" />
-              <col />
-              <col />
-              <col style="width:12ch" />
-            </colgroup>
-            <thead>
-              <tr><th>ID</th><th>동물</th><th>사용자</th><th>지역</th><th>상태</th></tr>
-            </thead>
-            <tbody>
-              ${rows || `<tr><td colspan="5" class="empty">데이터가 없습니다</td></tr>`}
-            </tbody>
-          </table>
-          ${pager}
-        `;
+                <table class="table">
+                    <colgroup>
+                        <col style="width:8ch" />
+                        <col style="width:12ch" />
+                        <col />
+                        <col />
+                        <col style="width:12ch" />
+                    </colgroup>
+                    <thead>
+                        <tr><th>ID</th><th>동물</th><th>사용자</th><th>지역</th><th>상태</th></tr>
+                    </thead>
+                    <tbody>
+                        ${rows || `<tr><td colspan="5" class="empty">데이터가 없습니다</td></tr>`}
+                    </tbody>
+                </table>
+                ${pager}
+            `;
 
+        // 페이지 이동
         document.querySelectorAll('#report-list button[data-pg]').forEach((b) => {
           b.addEventListener('click', () => {
             const p = Number(b.getAttribute('data-pg'));
@@ -254,9 +353,18 @@
           });
         });
 
-        document.querySelectorAll('#report-list tbody tr[data-id]').forEach((tr) => {
-          tr.addEventListener('click', (e) => {
-            if (!e.target.closest('a')) window.location.href = detailUrl(tr.dataset.id);
+        // 행 클릭 → 프리뷰 패널 열기
+        document.querySelectorAll('#report-list tbody tr.report-row').forEach((tr) => {
+          tr.addEventListener('click', () => {
+            openPreview({
+              id: tr.dataset.id,
+              animal: tr.dataset.animal,
+              reporter: tr.dataset.reporter,
+              region: tr.dataset.region,
+              status: tr.dataset.status,
+              created_at: tr.dataset.created,
+              photo_url: tr.dataset.photo,
+            });
           });
         });
       }
@@ -281,20 +389,20 @@
 
         const d = await fetchJSON(url);
         els.reporters().innerHTML = `
-          <div class="list">
-            ${
-              (d.results || [])
-                .map(
-                  (r) => `
-                <div class="list-item">
-                  <span class="name">${htmlEscape(r.name || '(알수없음)')}</span>
-                  <span class="count">${r.count != null ? r.count : 0}</span>
-                </div>
-              `
-                )
-                .join('') || `<div class="empty">데이터가 없습니다</div>`
-            }
-          </div>`;
+                <div class="list">
+                    ${
+                      (d.results || [])
+                        .map(
+                          (r) => `
+                            <div class="list-item">
+                                <span class="name">${htmlEscape(r.name || '(알수없음)')}</span>
+                                <span class="count">${r.count != null ? r.count : 0}</span>
+                            </div>
+                        `
+                        )
+                        .join('') || `<div class="empty">데이터가 없습니다</div>`
+                    }
+                </div>`;
       }
 
       /* ===== 검색(디바운스 + 버튼) ===== */
@@ -305,6 +413,12 @@
           searchTimer = setTimeout(() => loadReports(1, els.q().value.trim()), 300);
         });
         els.searchBtn().addEventListener('click', () => loadReports(1, els.q().value.trim()));
+
+        // 패널 닫기 이벤트
+        els.closeBtn().addEventListener('click', closePreview);
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape') closePreview();
+        });
       });
 
       /* ===== 초기 로드 ===== */

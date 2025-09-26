@@ -1,0 +1,105 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="utf-8" />
+    <title>{{ title }}</title>
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <link rel="stylesheet" href="{% static 'dashboard/css/dashboard.css' %}" />
+    <style>
+        body {
+            font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+            padding: 24px;
+        }
+
+        .wrap {
+            max-width: 960px;
+            margin: 0 auto;
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 16px;
+            align-items: center;
+        }
+
+        .toolbar .btn {
+            padding: 8px 12px;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            background: #111827;
+            color: #fff;
+            font-weight: 600;
+        }
+
+        .toolbar .btn.ghost {
+            background: #fff;
+            color: #111827;
+        }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-bottom: 12px;
+        }
+
+        input[type='text'],
+        textarea {
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            padding: 10px;
+        }
+
+        textarea {
+            min-height: 200px;
+        }
+
+        .meta {
+            color: #6b7280;
+            font-size: 12px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="wrap">
+        <h1>{{ title }}</h1>
+        <div class="meta">모드: {{ mode }}{% if content_id %} · ID: {{ content_id }}{% endif %} · 템플릿: {{ template_key }}</div>
+
+        <div class="toolbar">
+            <button id="btn-save" class="btn">저장</button>
+            <button id="btn-publish" class="btn">발행</button>
+            <button id="btn-back" class="btn ghost">목록으로</button>
+        </div>
+
+        <div class="field">
+            <label>제목</label>
+            <input id="title" type="text" placeholder="제목을 입력하세요" />
+        </div>
+        <div class="field">
+            <label>본문</label>
+            <textarea id="body" placeholder="내용을 입력하세요"></textarea>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            function goList() {
+                window.location.href = "{% url 'dashboard:contents' %}";
+            }
+            document.getElementById('btn-back').addEventListener('click', goList);
+            document.getElementById('btn-save').addEventListener('click', function() {
+                alert('임시 저장되었습니다. (데모)');
+            });
+            document.getElementById('btn-publish').addEventListener('click', function() {
+                alert('발행 완료! (데모)');
+                goList();
+            });
+        })();
+    </script>
+</body>
+
+</html>

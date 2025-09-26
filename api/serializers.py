@@ -3,6 +3,7 @@ from decimal import Decimal
 from rest_framework import serializers
 from django.apps import apps
 from urllib.parse import urlencode
+from django.utils import timezone
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 from .models import (
@@ -67,7 +68,7 @@ class AnimalSerializer(serializers.ModelSerializer):
             'description',
             'proxied_image_url',
         ]
-        
+
     def get_proxied_image_url(self, obj):
         url = getattr(obj, 'image_url', None)
         if not url:
@@ -115,7 +116,7 @@ class SearchHistorySerializer(serializers.ModelSerializer):
             'precautions': getattr(a, 'precautions', None),   # ← 대처법 노출
             'description': getattr(a, 'description', None),
         }
-    
+
     def get_proxied_image_url(self, obj):
         if not getattr(obj, 'image_url', None):
             return None
@@ -145,30 +146,31 @@ class LocationLiteSerializer(serializers.ModelSerializer):
         model = Location
         fields = ('id', 'address', 'city', 'district', 'region', 'latitude', 'longitude')
 
+# [REPLACE] 기존 ReportNoAuthCreateSerializer 전체를 아래로 교체
 class ReportNoAuthCreateSerializer(serializers.Serializer):
-    """
-    무인증 신고 생성 전용:
-      - multipart/form-data 로 전송
-      - 필수: animalId, photo
-      - 위치: locationId 주거나, 없으면 lat/lng 로 새 Location 생성
-      - status 기본값: 'checking'
-    """
-    animalId   = serializers.IntegerField()
+    # [MOD] animalId 를 옵션으로 변경(없으면 "미상"으로 폴백)
+    animalId   = serializers.IntegerField(required=False, allow_null=True)
     locationId = serializers.IntegerField(required=False, allow_null=True)
     status     = serializers.ChoiceField(
         choices=[c[0] for c in Report.STATUS_CHOICES],
         default='checking'
     )
     photo      = serializers.ImageField()
-
-    # 선택: 위경도 직접 받기 (locationId 없을 때)
     lat = serializers.FloatField(required=False)
     lng = serializers.FloatField(required=False)
 
     def create(self, validated):
-        animal = Animal.objects.get(id=validated["animalId"])
+        # ── 0) 동물 폴백: animalId 없으면 "미상" 자동 사용
+        animal = None
+        animal_id = validated.get("animalId")
+        if animal_id:
+            animal = Animal.objects.get(id=animal_id)
+        else:
+            animal, _ = Animal.objects.get_or_create(
+                name_kor="미상", defaults={"name_eng": "unknown"}
+            )
 
-        # 1) 위치 결정
+        # ── 1) 위치 결정: locationId 우선, 없으면 lat/lng 로 Location 생성/재사용
         loc = None
         loc_id = validated.get("locationId")
         if loc_id:
@@ -180,21 +182,23 @@ class ReportNoAuthCreateSerializer(serializers.Serializer):
             lat = validated.get("lat")
             lng = validated.get("lng")
             if lat is not None and lng is not None:
-                # 필요하다면 city/district/address 는 역지오로 채움
                 loc, _ = Location.objects.get_or_create(
-                    latitude=lat, longitude=lng,
+                    latitude=Decimal(str(lat)),
+                    longitude=Decimal(str(lng)),
                     defaults=dict(city="", district="", region="", address="")
                 )
 
-        # 2) Report 생성 (무인증이므로 user=None, report_date는 모델 default 사용)
+        # ── 2) Report 생성
         report = Report.objects.create(
-            user=None,                     # 모델이 null 허용이어야 함(앞서 안내)
+            user=None,                      # 무인증
             animal=animal,
             location=loc,
-            status=validated["status"],
-            image=validated["photo"],      # 모델 필드명: image
+            status=validated.get("status") or "checking",
+            image=validated["photo"],
+            report_date=timezone.now(),     # ★★ [ADD] NULL 방지 핵심
         )
         return report
+
 
 class SavedPlaceReadSerializer(serializers.ModelSerializer):
     # 출력 필드: 요청하신 그대로
@@ -356,29 +360,30 @@ class SavedPlaceCreateSerializer(serializers.ModelSerializer):
 
     # 생성 응답은 읽기 포맷으로 통일
     def to_representation(self, instance):
-        return SavedPlaceReadSerializer(instance, context=self.context).data    
-    
+        return SavedPlaceReadSerializer(instance, context=self.context).data
+
 class ReportSerializer(serializers.ModelSerializer):
     report_id   = serializers.IntegerField(source='id', read_only=True)
     animal_name = serializers.SerializerMethodField(read_only=True)
 
+    # 🔹 이미지 절대 URL 제공
+    photo_url = serializers.SerializerMethodField(read_only=True)
+
+    # 쓰기용
     location_id = serializers.PrimaryKeyRelatedField(
         source='location',
         queryset=Location.objects.all(),
         write_only=True
-    )
-
-    location = LocationSerializer(read_only=True)  # 조회 시 상세 위치 정보 포함
-
-    user_id = serializers.PrimaryKeyRelatedField(
-        source='user',
-        read_only=True
     )
     animal_id = serializers.PrimaryKeyRelatedField(
         source='animal',
         queryset=Animal.objects.all(),
         write_only=True
     )
+
+    # 읽기용
+    location = LocationSerializer(read_only=True)
+    user_id = serializers.PrimaryKeyRelatedField(source='user', read_only=True)
 
     class Meta:
         model = Report
@@ -388,21 +393,34 @@ class ReportSerializer(serializers.ModelSerializer):
             'animal_id', 'animal_name',
             'status',
             'user_id',
-            'image',
-            'location_id',  # 쓰기
-            'location',     # 읽기
+            'image',          # 원본 필드(업로드/다운로드 필요시 유지)
+            'photo_url',      # ← 프런트에서 쓰기 편한 절대 URL
+            'location_id',    # 쓰기
+            'location',       # 읽기
         ]
-        read_only_fields = ['report_id', 'animal_name', 'location', 'user_id']
+        read_only_fields = ['report_id', 'animal_name', 'location', 'user_id', 'photo_url']
 
     def get_animal_name(self, obj):
         return getattr(obj.animal, 'name_kor', str(obj.animal))
+
+    def get_photo_url(self, obj):
+        """
+        이미지가 있으면 절대 URL로 반환.
+        (개발환경: /media/…, 운영: Nginx/S3 등에 맞게 그대로 작동)
+        """
+        if not getattr(obj, 'image', None):
+            return ""
+        url = obj.image.url  # ImageField가 제공
+        req = self.context.get('request')
+        return req.build_absolute_uri(url) if req else url
 
     def validate_status(self, value):
         allowed = {c[0] for c in Report.STATUS_CHOICES}
         if value not in allowed:
             raise serializers.ValidationError('허용되지 않은 상태값입니다.')
         return value
-        
+
+
 class NotificationSerializer(serializers.ModelSerializer):
     notification_id = serializers.IntegerField(source='id', read_only=True)
 
@@ -562,7 +580,7 @@ class NotificationSerializer(serializers.ModelSerializer):
         if sc and sc not in dict(Notification.STATUS_CHANGE_CHOICES):
             raise serializers.ValidationError({'status_change': f'허용되지 않은 값: {sc}'})
         return attrs
-    
+
 class FeedbackSerializer(serializers.ModelSerializer):
     feedback_id = serializers.IntegerField(read_only=True)
     report_id   = serializers.PrimaryKeyRelatedField(source='report', queryset=Report.objects.all())

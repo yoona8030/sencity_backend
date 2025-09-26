@@ -25,11 +25,12 @@ INSTALLED_APPS = [
     'django_filters',
     'rest_framework',
     'rest_framework_simplejwt.token_blacklist',
-    'corsheaders', 
-    'api', 
+    'corsheaders',
+    'api',
     'inquiries',
-    'dashboard', 
-    "django_extensions",
+    'dashboard',
+    'api.metrics.apps.MetricsConfig',
+    'django_extensions',
 ]
 
 SIMPLE_JWT = {
@@ -43,7 +44,7 @@ SIMPLE_JWT = {
 }
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware', 
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -163,6 +164,6 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:19006',
     'http://10.0.2.2:8000',
-    'http://192.168.0.15', 
+    'http://192.168.0.15',
     'http://222.109.48.232'
 ]

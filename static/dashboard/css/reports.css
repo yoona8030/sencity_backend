@@ -240,6 +240,111 @@
 }
 
 
+/* =========================
+   A) 신고 리스트 썸네일 컬럼
+   ========================= */
+
+.table .col-thumb {
+    width: 56px;
+}
+
+.table .col-thumb img {
+    width: 40px;
+    height: 40px;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 1px solid #e5e7eb;
+    display: block;
+}
+
+.table .thumb-empty {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    border: 1px dashed #e5e7eb;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #9ca3af;
+    font-size: 14px;
+}
+
+.table tbody tr:hover .col-thumb img {
+    box-shadow: 0 0 0 2px #111 inset;
+}
+
+
+/* ========================================
+   B) 오른쪽 슬라이드 상세 프리뷰 패널
+   ======================================== */
+
+.report-preview {
+    position: fixed;
+    right: -420px;
+    top: 0;
+    height: 100dvh;
+    width: 400px;
+    z-index: 1200;
+    background: #fff;
+    border-left: 1px solid #e5e7eb;
+    box-shadow: -8px 0 30px rgba(0, 0, 0, 0.06);
+    transition: right 0.24s ease;
+    padding: 16px 14px 16px 16px;
+}
+
+.report-preview.on {
+    right: 0;
+}
+
+.report-preview .close {
+    position: absolute;
+    right: 10px;
+    top: 10px;
+    border: 1px solid #e5e7eb;
+    background: #f9fafb;
+    border-radius: 8px;
+    padding: 6px 8px;
+    cursor: pointer;
+}
+
+.report-preview .preview-body {
+    display: grid;
+    gap: 12px;
+}
+
+.report-preview .img-wrap {
+    width: 100%;
+    aspect-ratio: 4/3;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #fafafa;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.report-preview .img-wrap img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.report-preview .meta {
+    margin-top: 4px;
+    display: grid;
+    gap: 6px;
+    font-size: 0.95rem;
+}
+
+.report-preview .meta strong {
+    display: inline-block;
+    width: 64px;
+    color: #6b7280;
+}
+
+
 /* 반응형 */
 
 @media (max-width: 980px) {
@@ -259,6 +364,14 @@
     .indent-under-title {
         margin-left: 0;
     }
+    /* 모바일에서는 프리뷰를 전폭으로 */
+    .report-preview {
+        width: 100%;
+        right: -100%;
+    }
+    .report-preview.on {
+        right: 0;
+    }
 }
 
 @media (max-width: 640px) {
@@ -268,4 +381,12 @@
     .table {
         min-width: 590px;
     }
+}
+
+
+/* 프리뷰 패널 내 '자세히 보기' 링크 숨김 */
+
+.report-preview .actions,
+.report-preview #pv-link {
+    display: none !important;
 }
