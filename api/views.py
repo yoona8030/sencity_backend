@@ -248,7 +248,7 @@ def _is_private_host(hostname: str) -> bool:
 
 
 @require_GET
-@cache_page(60 * 60)  # 1 hour
+@cache_page(60 * 60)
 def proxy_image_view(request):
     url = (request.GET.get("url") or "").strip()
     if not url:
@@ -258,8 +258,18 @@ def proxy_image_view(request):
         p = urlparse(url)
         if p.scheme not in ALLOWED_SCHEMES or not p.hostname:
             return HttpResponseBadRequest("invalid url")
+
+        # 1) 허용 호스트 검사
+        if p.hostname not in ALLOWED_HOSTS_FOR_PROXY:
+            return HttpResponseBadRequest("host not allowed")
+
+        # 2) 사설망/루프백 차단
         if _is_private_host(p.hostname):
             return HttpResponseBadRequest("private host")
+
+        # 3) 포트 제한(이미지 CDN 기본 포트만 허용)
+        if p.port not in (None, 80, 443):
+            return HttpResponseBadRequest("port not allowed")
     except Exception:
         return HttpResponseBadRequest("bad url")
 
@@ -273,14 +283,26 @@ def proxy_image_view(request):
     }
 
     try:
-        r = requests.get(url, headers=headers, stream=True, timeout=REQUEST_TIMEOUT)
+        # 4) 리다이렉트 금지, 헤더만 먼저 확인해 사이즈 제한
+        r_head = requests.head(url, headers=headers, timeout=REQUEST_TIMEOUT, allow_redirects=False)
+        if r_head.is_redirect or r_head.status_code in (301, 302, 303, 307, 308):
+            return HttpResponseBadRequest("redirect not allowed")
+
+        cl = r_head.headers.get("Content-Length")
+        if cl and cl.isdigit() and int(cl) > 5_000_000:  # 5MB 제한 예시
+            return HttpResponseBadRequest("file too large")
+
+        r = requests.get(url, headers=headers, stream=True, timeout=REQUEST_TIMEOUT, allow_redirects=False)
     except Exception:
         return HttpResponseBadRequest("upstream fetch error")
 
     if not r.ok:
         return HttpResponse(f"upstream status {r.status_code}", status=r.status_code)
 
-    content_type = r.headers.get("Content-Type", "application/octet-stream")
+    content_type = r.headers.get("Content-Type", "")
+    if not content_type.startswith("image/"):
+        return HttpResponseBadRequest("not an image")
+
     resp = StreamingHttpResponse(r.iter_content(chunk_size=8192), content_type=content_type)
     cl = r.headers.get("Content-Length")
     if cl and cl.isdigit():
@@ -782,49 +804,38 @@ class RecognizeAnimalView(APIView):
     permission_classes = [AllowAny]
     parser_classes = [MultiPartParser, FormParser]
 
+    MAX_UPLOAD = 12_000_000  # 5MB
+
     _ALIAS_EN = {
-        "water deer": "goat",
-        "water-deer": "goat",
-        "water dear": "goat",
-        "roe deer": "roe deer",
-        "great egret": "egret",
-        "intermediate egret": "egret",
-        "little egret": "egret",
-        "egret": "egret",
-        "grey heron": "heron",
-        "gray heron": "heron",
-        "heron": "heron",
-        "korean squirrel": "squirrel",
-        "eurasian red squirrel": "squirrel",
-        "squirrel": "squirrel",
-        "chipmunk": "chipmunk",
-        "wild boar": "wild boar",
-        "raccoon": "raccoon",
-        "black bear": "black bear",
-        "weasel": "weasel",
-        "dog": "dog",
-        "cat": "cat",
+        "goat": "goat", "roe deer": "roe deer",
+        "great egret": "egret", "intermediate egret": "egret", "little egret": "egret", "egret": "egret",
+        "grey heron": "heron", "gray heron": "heron", "heron": "heron",
+        "hare": "hare",
+        "korean squirrel": "squirrel", "eurasian red squirrel": "squirrel", "squirrel": "squirrel",
+        "chipmunk": "chipmunk", "wild boar": "wild boar", "raccoon": "raccoon",
+        "asiatic black bear": "asiatic black bear", "weasel": "weasel", "dog": "dog", "cat": "cat",
     }
 
     _ALIAS_KO = {
-        "goat": "고라니",
-        "roe deer": "노루",
-        "egret": "중대백로",
-        "heron": "왜가리",
-        "squirrel": "다람쥐",
-        "chipmunk": "청설모",
-        "wild boar": "멧돼지",
-        "weasel": "족제비",
-        "dog": "강아지",
-        "cat": "고양이",
-        "raccoon": "너구리",
-        "black bear": "반달가슴곰",
+        "goat": "고라니", "roe deer": "노루", "egret": "중대백로", "heron": "왜가리",
+        "squirrel": "다람쥐", "chipmunk": "청설모", "wild boar": "멧돼지", "weasel": "족제비",
+        "dog": "강아지", "cat": "고양이", "raccoon": "너구리", "asiatic black bear": "반달가슴곰",
+        "hare": "멧토끼",
     }
 
     _GROUP_LABEL_KO = {
         "deer": "고라니/노루",
-        "egret_heron": "중대백로/왜가리",
+        "heron_egret": "중대백로/왜가리",
         "sciuridae": "다람쥐/청설모",
+    }
+    # rep_eng -> group 코드 강제 매핑
+    _ENG_TO_GROUP = {
+        "goat": "deer",
+        "roe deer": "deer",
+        "egret": "heron_egret",
+        "heron": "heron_egret",
+        "squirrel": "sciuridae",
+        "chipmunk": "sciuridae",
     }
 
     @classmethod
@@ -848,30 +859,59 @@ class RecognizeAnimalView(APIView):
         if not f:
             return Response({"detail": "photo(또는 image) 파일이 필요합니다."}, status=400)
 
-        img = Image.open(f)
+        # 1) 크기 제한
+        if getattr(f, "size", 0) > self.MAX_UPLOAD:
+            return Response({"detail": "file too large"}, status=413)
+
+        # 2) 포맷 검증 + EXIF 회전 보정 + RGB 변환
+        try:
+            img = Image.open(f)
+            img.load()
+            try:
+                from PIL import ImageOps
+                img = ImageOps.exif_transpose(img)
+            except Exception:
+                pass
+            if img.mode != "RGB":
+                img = img.convert("RGB")
+        except Exception:
+            return Response({"detail": "invalid image"}, status=400)
+
         grouped = (request.query_params.get("grouped") in ("1", "true", "yes"))
 
         if grouped:
             topg = predict_topk_grouped(img, k=3)
             results = []
             for g in topg:
-                top_member_en = g["members"][0][0]
-                rep_eng = self._norm_eng(top_member_en)
-                ko_from_key = self._to_kor(rep_eng)
+                members = g.get("members") or []           # 예: [("Goat", 0.99), ("Roe deer", 0.01)]
+                top_member_en = members[0][0] if members else ""
+                rep_eng = self._norm_eng(top_member_en)    # "goat" 등
 
-                if g.get("label_ko"):
-                    display = self._GROUP_LABEL_KO.get(g["group"], g["label_ko"])
-                else:
-                    display = ko_from_key or top_member_en
+                # ✅ group 코드 정규화: 모델이 goat/heron 등으로 주더라도 의도한 그룹으로 강제
+                group_code = self._ENG_TO_GROUP.get(rep_eng, (g.get("group") or ""))
 
-                a = self._find_animal(rep_eng, display)
+                # ✅ 그룹 KO 라벨 우선 적용
+                display_ko = self._GROUP_LABEL_KO.get(group_code)
+
+                # 그룹 라벨이 없으면 멤버 KO를 합성(A/B)
+                if not display_ko:
+                    mapped = []
+                    for m, _p in members:
+                        key = self._norm_eng(m)
+                        mapped.append(self._to_kor(key) or m)
+                    mapped = list(dict.fromkeys(mapped))  # 중복 제거
+                    display_ko = "/".join(mapped) if mapped else (self._to_kor(rep_eng) or top_member_en)
+
+                # 보고서 저장용 animal_id는 탑 멤버 기준으로 매핑
+                a = self._find_animal(rep_eng, display_ko)
 
                 results.append({
-                    "group": g["group"],
-                    "label": display,
-                    "prob": g["prob"],
-                    "members": g["members"],
-                    "rep_eng": rep_eng,
+                    "group": group_code,          # 예: "deer"
+                    "label": display_ko,          # 예: "고라니/노루"
+                    "label_ko": display_ko,
+                    "prob": g.get("prob"),
+                    "members": members,           # 원본 멤버 그대로
+                    "rep_eng": rep_eng,           # 탑 멤버 EN
                     "animal_id": a.id if a else None,
                 })
 
@@ -911,16 +951,14 @@ def animal_resolve(request):
     # 프로젝트 실데이터 기준: name_kor / name_eng 필드 사용
     alias_map = {
         # EN → KO 대표명(필요시 확장)
-        "water deer": "고라니",
-        "water-deer": "고라니",
-        "water dear": "고라니",
+        "goat": "고라니",
         "roe deer": "노루",
         "wild boar": "멧돼지",
         "raccoon": "너구리",
         "chipmunk": "청설모",
         "squirrel": "다람쥐",
-        "black bear": "반달가슴곰",
-        "hare": "토끼",
+        "asiatic black bear": "반달가슴곰",
+        "hare": "멧토끼",
         "weasel": "족제비",
         "heron": "왜가리",
         "egret": "중대백로",

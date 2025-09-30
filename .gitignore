@@ -49,10 +49,7 @@ build/
 
 # Data / Artifacts
 PetImages*/
-converted_savedmodel/
 dashboard/vision/
-external/**/outputs/
-external/classification_model/
 *.h5
 *.hdf5
 *.pb

@@ -4,7 +4,7 @@ from rest_framework.routers import DefaultRouter
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView, TokenVerifyView
 from . import views
 from .views import (
-    SignUpView, LoginView, animal_info, proxy_image_view as image_proxy,
+    SignUpView, LoginView, animal_info, proxy_image_view,
     UserViewSet, AnimalViewSet, SearchHistoryViewSet, LocationViewSet,
     ReportViewSet, NotificationViewSet, FeedbackViewSet, StatisticViewSet,
     AdminViewSet, SavedPlaceViewSet,
@@ -31,12 +31,13 @@ urlpatterns = [
 
     path('signup/', SignUpView.as_view()),
     path('login/',  LoginView.as_view()),
-    path('image-proxy/', image_proxy, name='image-proxy'),
+    path('image-proxy/', proxy_image_view, name='image-proxy'),
+    path('image-proxy',  proxy_image_view),
     path('animal-info/', animal_info, name='animal-info'),
     path('reports/stats/animal-raw/', views.animal_stats_raw),
     path('user/profile/',         MeProfileView.as_view()),
     path('user/change-password/', ChangePasswordView.as_view()),
-    path('location/reverse-geocode', ReverseGeocodeView.as_view()),
+    path('location/reverse-geocode/', ReverseGeocodeView.as_view()),
     path('ai/recognize', RecognizeAnimalView.as_view(), name='ai-recognize'),
     path('reports/no-auth', ReportNoAuthView.as_view()),
     path('', include('inquiries.urls')),
@@ -50,6 +51,10 @@ urlpatterns = [
     path("metrics/", include("api.metrics.urls")),  # KPI
 
     path('dashboard/report-points/', dashboard_report_points), # dashboard
+
+    path('recognize/', RecognizeAnimalView.as_view(), name='recognize-slash'),
+    path('recognize',  RecognizeAnimalView.as_view(), name='recognize-noslash'),
+    path('ai/recognize/', RecognizeAnimalView.as_view(), name='ai-recognize-slash'),
 
     # 🔽 마지막에 router
     path('', include(router.urls)),

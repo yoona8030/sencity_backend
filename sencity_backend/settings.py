@@ -3,7 +3,7 @@ from datetime import timedelta
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
+MODEL_DIR = BASE_DIR / "sencity_classification_model" / "models"
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-c#-byo@@o4m0xv_xme#p(51cijvsdfx211e_=v3p5_$87hhy!p'
 
@@ -12,7 +12,8 @@ DEBUG = True
 
 # ALLOWED_HOSTS = ['localhost', '127.0.0.1', '10.0.2.2', '0.0.0.0', '121.161.194.229', '172.30.1.68']
 ALLOWED_HOSTS = ['*']
-# Application definition
+# 업로드 허용 이미지 타입 (views에서 재사용)
+ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -162,8 +163,6 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 CORS_ALLOW_CREDENTIALS = True
 
 CORS_ALLOWED_ORIGINS = [
-    'http://localhost:19006',
     'http://10.0.2.2:8000',
     'http://192.168.0.15',
-    'http://222.109.48.232'
 ]

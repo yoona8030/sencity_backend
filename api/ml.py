@@ -11,14 +11,18 @@ try:
 except Exception:
     TF_AVAILABLE = False
 
-# ── 경로: 프로젝트 루트의 converted_savedmodel 사용
-MODEL_DIR  = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "converted_savedmodel"))
-MODEL_PATH = os.path.join(MODEL_DIR, "model.savedmodel")
+# 임포트 가드
+try:
+    from keras.applications.efficientnet import preprocess_input as effnet_preprocess  # type: ignore[reportMissingImports]
+except Exception:
+    from tensorflow.keras.applications.efficientnet import preprocess_input as effnet_preprocess  # type: ignore[reportMissingImports]
 
-# 라벨 파일: labels.txt 또는 labels 둘 다 허용
-LABELS_PATH_TXT = os.path.join(MODEL_DIR, "labels.txt")
-LABELS_PATH_RAW = os.path.join(MODEL_DIR, "labels")
-LABELS_PATH = LABELS_PATH_TXT if os.path.exists(LABELS_PATH_TXT) else LABELS_PATH_RAW
+PROJECT_ROOT   = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
+MODEL_ROOT     = os.path.join(PROJECT_ROOT, "sencity_classification_model", "models")
+KERAS_PATH     = os.path.join(MODEL_ROOT, "animal_classifier.keras")
+SAVEDMODEL_DIR = os.path.join(MODEL_ROOT, "animal_classifier_savedmodel")
+LABELS_PATH    = os.path.join(MODEL_ROOT, "labels.txt")
+CLASS_INFO_JSON= os.path.join(MODEL_ROOT, "class_info.json")
 
 _model = None
 _labels: List[str] | None = None
@@ -89,8 +93,8 @@ def _predict_probs(img: Image.Image):
 
 # --- “고라니/노루”, “중대백로/왜가리”, “다람쥐/청설모”를 묶는 그룹 TopK ---
 GROUP_MAP = {
-    # 사슴류: water deer(고라니), roe deer(노루)
-    "water deer": "deer",
+    # 사슴류: goat(고라니), roe deer(노루)
+    "goat": "goat",
     "roe deer":   "deer",
 
     # 백로/왜가리 계열
@@ -100,8 +104,6 @@ GROUP_MAP = {
     # 다람쥐과: squirrel(청설모), chipmunk(멧다람쥐)
     "squirrel":  "sciuridae",
     "chipmunk":  "sciuridae",
-    # 필요 시 오탈자 보정
-    "water dear": "deer",  # 오타 라벨 대비
 }
 
 # 그룹의 한글 표시(응답용)
@@ -114,7 +116,7 @@ GROUP_DISPLAY_KO = {
 def predict_topk_grouped(img: Image.Image, k: int = 3):
     """
     원시 클래스 확률을 그룹 키로 합산 → 정규화 → 그룹 TopK 반환.
-    반환 예: [{'group': 'deer', 'label_ko': '고라니/노루', 'prob': 0.83, 'members': [('water deer', 0.7), ('roe deer', 0.13)]}, ...]
+    반환 예: [{'group': 'deer', 'label_ko': '고라니/노루', 'prob': 0.83, 'members': [('goat', 0.7), ('roe deer', 0.13)]}, ...]
     """
     import numpy as np
     labels, probs = _predict_probs(img)
@@ -165,17 +167,34 @@ def _load_labels() -> List[str]:
     global _labels
     if _labels is not None:
         return _labels
+
     labels: List[str] = []
-    try:
+
+    # 1) labels.txt 우선
+    if os.path.exists(LABELS_PATH):
         with open(LABELS_PATH, "r", encoding="utf-8") as f:
             for ln in f:
                 z = _normalize_label(ln)
                 if z:
                     labels.append(z)
-        print("[ml] labels loaded(normalized):", labels, file=sys.stderr)
-    except FileNotFoundError:
-        labels = ["고라니", "멧토끼", "너구리", "고양이", "멧돼지"]
-        print("[ml] labels fallback:", labels, file=sys.stderr)
+
+    # 2) 없거나 비었으면 class_info.json에서 복구
+    if not labels and os.path.exists(CLASS_INFO_JSON):
+        import json
+        data = json.load(open(CLASS_INFO_JSON, encoding="utf-8"))
+        classes = data.get("class_names") or []
+        labels = [_normalize_label(c) for c in classes if _normalize_label(c)]
+        # labels.txt 재생성(다음엔 여기서 읽음)
+        if labels:
+            with open(LABELS_PATH, "w", encoding="utf-8") as f:
+                f.write("\n".join(labels))
+
+    # 3) 그래도 없으면 폴백
+    if not labels:
+        labels = ["Goat", "Wild boar", "Squirrel", "Raccoon", "Asiatic black bear",
+                  "Hare", "Weasel", "Heron", "Dog", "Cat"]
+
+    print("[ml] labels loaded(normalized):", labels, file=sys.stderr)
     _labels = labels
     return labels
 
@@ -183,28 +202,57 @@ def _load_model():
     global _model
     if _model is not None:
         return _model
+
     print("[ml] TF_AVAILABLE:", TF_AVAILABLE, file=sys.stderr)
-    print("[ml] MODEL_DIR:", MODEL_DIR, file=sys.stderr)
-    print("[ml] MODEL_PATH exists:", os.path.exists(MODEL_PATH), MODEL_PATH, file=sys.stderr)
-    if TF_AVAILABLE and os.path.exists(MODEL_PATH):
-        _model = tf.saved_model.load(MODEL_PATH)
-        print("[ml] model loaded", file=sys.stderr)
-        if hasattr(_model, "signatures"):
-            print("[ml] signatures:", list(_model.signatures.keys()), file=sys.stderr)
-            fn = _model.signatures.get("serving_default")
-            if fn:
-                print("[ml] outputs:", fn.structured_outputs, file=sys.stderr)
-    else:
+    print("[ml] KERAS_PATH exists:", os.path.exists(KERAS_PATH), KERAS_PATH, file=sys.stderr)
+    print("[ml] SAVEDMODEL_DIR exists:", os.path.exists(SAVEDMODEL_DIR), SAVEDMODEL_DIR, file=sys.stderr)
+
+    if not TF_AVAILABLE:
         _model = None
-        print("[ml] using DUMMY (no TF or no model)", file=sys.stderr)
+        print("[ml] using DUMMY (TensorFlow not available)", file=sys.stderr)
+        return _model
+
+    # 1) .keras 단일 파일 우선
+    try:
+        if os.path.exists(KERAS_PATH):
+            from tensorflow.keras import models as keras_models # type: ignore[reportMissingImports]
+            _model = keras_models.load_model(KERAS_PATH)
+            print("[ml] loaded .keras model", file=sys.stderr)
+            return _model
+    except Exception as e:
+        print("[ml] .keras load failed:", e, file=sys.stderr)
+
+    # 2) 폴더형 SavedModel
+    try:
+        if os.path.exists(SAVEDMODEL_DIR):
+            # Keras3 TFSMLayer가 없어도 직접 signature 호출 가능
+            _model = tf.saved_model.load(SAVEDMODEL_DIR)
+            print("[ml] loaded SavedModel", file=sys.stderr)
+            if hasattr(_model, "signatures"):
+                print("[ml] signatures:", list(_model.signatures.keys()), file=sys.stderr)
+            return _model
+    except Exception as e:
+        print("[ml] SavedModel load failed:", e, file=sys.stderr)
+
+    _model = None
+    print("[ml] using DUMMY (no model found)", file=sys.stderr)
     return _model
 
 def _preprocess(img: Image.Image, size=(224, 224)):
     if not TF_AVAILABLE:
         return None
-    arr = img.convert("RGB").resize(size)
-    arr = np.asarray(arr, dtype=np.float32) / 255.0
-    return arr[None, ...]  # (1,H,W,3)
+    from tensorflow.keras.applications.efficientnet import preprocess_input as effnet_preprocess # type: ignore[reportMissingImports]
+
+    # PIL → RGB → 리사이즈 → float32
+    arr = np.asarray(img.convert("RGB").resize(size), dtype=np.float32)
+
+    # EfficientNet은 0~255 스케일을 기대 → 혹시 0~1이면 255 곱해 보정
+    if arr.max() <= 1.0:
+        arr = arr * 255.0
+
+    arr = effnet_preprocess(arr)  # ← 학습과 동일 전처리
+    return arr[None, ...]         # (1,H,W,3)
+
 
 def predict_topk(img: Image.Image, k: int = 3) -> List[Dict]:
     labels = _load_labels()

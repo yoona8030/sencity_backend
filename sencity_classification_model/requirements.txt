@@ -1,0 +1,10 @@
+numpy==1.26.4
+scipy==1.11.4
+matplotlib==3.8.4
+contourpy==1.2.0
+kiwisolver==1.4.5
+packaging==25.0
+pillow==11.3.0
+pyparsing==3.2.5
+python-dateutil==2.9.0.post0
+six==1.17.0
