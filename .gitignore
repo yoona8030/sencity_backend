@@ -52,7 +52,6 @@ PetImages*/
 dashboard/vision/
 *.h5
 *.hdf5
-*.pb
 *.tflite
 *.pt
 *.onnx
