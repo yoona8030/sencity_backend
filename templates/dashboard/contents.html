@@ -12,7 +12,7 @@
     <link rel="stylesheet" href="{% static 'dashboard/css/dashboard.css' %}?v=fit-2025-09-19" />
 
     <!-- 이 페이지 전용 -->
-    <link rel="stylesheet" href="{% static 'dashboard/css/contents.css' %}?v=15" />
+    <link rel="stylesheet" href="{% static 'dashboard/css/contents.css' %}?v=16" />
 </head>
 
 <body class="page-contents">
@@ -72,28 +72,29 @@
                         <div class="section-actions-left">
                             <input id="q" class="input" type="text" placeholder="제목/태그 검색" />
                             <button id="btn-search" class="btn">
-                  <i class="fa-solid fa-magnifying-glass"></i>
-                  검색
-                </button>
+                <i class="fa-solid fa-magnifying-glass"></i>
+                검색
+              </button>
                         </div>
 
                         <!-- 우측: 액션 -->
                         <div class="section-actions-right">
                             <select id="templateSelect" class="input select">
-                  <option value="">템플릿 선택</option>
-                  <option value="new-card">신규 기능 카드</option>
-                  <option value="weekly">주간 통계 하이라이트</option>
-                  <option value="safety">안전 수칙 카드</option>
-                  <option value="event">이벤트 안내</option>
-                </select>
+                <option value="">템플릿 선택</option>
+                <option value="new-card">신규 기능 카드</option>
+                <option value="weekly">주간 통계 하이라이트</option>
+                <option value="safety">안전 수칙 카드</option>
+                <option value="event">이벤트 안내</option>
+                <option value="app-banner">앱 배너 공지</option>
+              </select>
                             <button id="btn-add-template" class="btn ghost">
-                  <i class="fa-regular fa-square-plus"></i>
-                  템플릿 추가
-                </button>
+                <i class="fa-regular fa-square-plus"></i>
+                템플릿 추가
+              </button>
                             <button id="btn-new" class="btn primary">
-                  <i class="fa-solid fa-plus"></i>
-                  새 콘텐츠
-                </button>
+                <i class="fa-solid fa-plus"></i>
+                새 콘텐츠
+              </button>
                         </div>
                     </div>
 
@@ -105,7 +106,7 @@
                         <!-- 신규 기능 카드 -->
                         <article class="tmpl-card" data-template-id="new-card">
                             <div class="tmpl-head">
-                                <div class="tmpl-icon"><i class="fa-solid fa-sparkles fa-star-of-life"></i></div>
+                                <div class="tmpl-icon"><i class="fa-solid fa-star-of-life"></i></div>
                                 <div class="tmpl-title">신규 기능 카드</div>
                             </div>
                             <p class="tmpl-desc">썸네일 + 3줄 요약 + 자세히 보기. 릴리즈 안내/가이드에 적합.</p>
@@ -117,9 +118,9 @@
                             <div class="tmpl-actions">
                                 <button class="btn ghost" data-action="create">템플릿 생성</button>
                                 <button class="btn" data-action="preview">
-                    <i class="fa-regular fa-eye"></i>
-                    미리보기
-                  </button>
+                  <i class="fa-regular fa-eye"></i>
+                  미리보기
+                </button>
                             </div>
                         </article>
 
@@ -138,9 +139,9 @@
                             <div class="tmpl-actions">
                                 <button class="btn ghost" data-action="create">템플릿 생성</button>
                                 <button class="btn" data-action="preview">
-                    <i class="fa-regular fa-eye"></i>
-                    미리보기
-                  </button>
+                  <i class="fa-regular fa-eye"></i>
+                  미리보기
+                </button>
                             </div>
                         </article>
 
@@ -158,9 +159,9 @@
                             <div class="tmpl-actions">
                                 <button class="btn ghost" data-action="create">템플릿 생성</button>
                                 <button class="btn" data-action="preview">
-                    <i class="fa-regular fa-eye"></i>
-                    미리보기
-                  </button>
+                  <i class="fa-regular fa-eye"></i>
+                  미리보기
+                </button>
                             </div>
                         </article>
 
@@ -178,14 +179,38 @@
                             <div class="tmpl-actions">
                                 <button class="btn ghost" data-action="create">템플릿 생성</button>
                                 <button class="btn" data-action="preview">
-                    <i class="fa-regular fa-eye"></i>
-                    미리보기
-                  </button>
+                  <i class="fa-regular fa-eye"></i>
+                  미리보기
+                </button>
+                            </div>
+                        </article>
+
+                        <!-- 앱 배너 공지 (신규) -->
+                        <article class="tmpl-card" data-template-id="app-banner">
+                            <div class="tmpl-head">
+                                <div class="tmpl-icon"><i class="fa-solid fa-bullhorn"></i></div>
+                                <div class="tmpl-title">앱 배너 공지</div>
+                            </div>
+                            <p class="tmpl-desc">앱 홈 상단 노란 배너 영역에 즉시 노출되는 공지를 생성합니다. (선택) CTA 링크 포함.</p>
+                            <div class="tmpl-meta">
+                                <span class="badge">앱 배너</span>
+                                <span class="badge">공지</span>
+                                <span class="badge">즉시 노출</span>
+                            </div>
+                            <div class="tmpl-actions">
+                                <button class="btn ghost" data-action="banner">
+                  <i class="fa-regular fa-paper-plane"></i>
+                  앱에 띄우기
+                </button>
+                                <button class="btn" data-action="preview">
+                  <i class="fa-regular fa-eye"></i>
+                  미리보기
+                </button>
                             </div>
                         </article>
                     </div>
 
-                    <!-- 섹션: 최근 생성 -->
+                    <!-- 섹션: 최근 생성 (예시) -->
                     <h2 class="sec-title">
                         <i class="fa-solid fa-clock-rotate-left"></i> 최근 생성
                     </h2>
@@ -234,8 +259,8 @@
             <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid #eee">
                 <strong id="tmpl-modal-title" style="font-size: 16px">미리보기</strong>
                 <button id="tmpl-modal-close" style="height: 32px; padding: 0 10px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; cursor: pointer">
-            닫기
-          </button>
+          닫기
+        </button>
             </div>
             <div style="padding: 0; overflow: auto; flex: 1; min-height: 360px">
                 <iframe id="tmpl-modal-frame" src="" style="width: 100%; height: 65vh; border: 0; display: none"></iframe>
@@ -252,8 +277,53 @@
               border-radius: 10px;
               cursor: pointer;
             ">
-            이 템플릿으로 만들기
-          </button>
+          이 템플릿으로 만들기
+        </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 앱 배너 생성 모달 (신규) -->
+    <div id="banner-modal-mask" style="
+        display:none; position:fixed; inset:0; background:rgba(0,0,0,.45);
+        z-index:10000; align-items:center; justify-content:center;">
+        <div style="width:min(720px,92vw); background:#fff; border-radius:14px; box-shadow:0 10px 40px rgba(0,0,0,0.18);">
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid #eee;">
+                <strong style="font-size:16px">앱 배너 공지 만들기</strong>
+                <button id="banner-modal-close" style="height:32px; padding:0 10px; border:1px solid #e5e7eb; border-radius:8px; background:#fff; cursor:pointer">닫기</button>
+            </div>
+            <div style="padding:16px; display:grid; gap:12px;">
+                <label style="display:grid; gap:6px;">
+          <span>텍스트 <span style="color:#d00">*</span></span>
+          <textarea id="banner-text" rows="3" class="input" placeholder="앱 상단에 표시될 공지 문구를 입력하세요" style="width:100%;"></textarea>
+        </label>
+                <label style="display:grid; gap:6px;">
+          <span>CTA URL (선택)</span>
+          <input id="banner-cta" type="url" class="input" placeholder="https:// 또는 앱 내 딥링크" />
+        </label>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                    <label style="display:grid; gap:6px;">
+            <span>시작 시각 (기본: 지금)</span>
+            <input id="banner-starts" type="datetime-local" class="input" />
+          </label>
+                    <label style="display:grid; gap:6px;">
+            <span>종료 시각 (선택)</span>
+            <input id="banner-ends" type="datetime-local" class="input" />
+          </label>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                    <label style="display:grid; gap:6px;">
+            <span>우선순위</span>
+            <input id="banner-priority" type="number" class="input" value="0" />
+          </label>
+                    <label style="display:flex; align-items:center; gap:10px; margin-top:26px;">
+            <input id="banner-active" type="checkbox" checked />
+            <span>활성화 (체크 시 바로 노출)</span>
+          </label>
+                </div>
+            </div>
+            <div style="padding:12px 16px; border-top:1px solid #eee; display:flex; gap:8px; justify-content:flex-end;">
+                <button id="banner-submit" class="btn primary"><i class="fa-regular fa-paper-plane"></i> 생성 및 앱에 띄우기</button>
             </div>
         </div>
     </div>
@@ -268,6 +338,7 @@
                 addTemplate: '/dashboard/contents/templates/new/',
                 newContent: '/dashboard/contents/new/',
                 apiCreate: '/dashboard/api/contents/create/', // 있으면 사용, 없으면 자동 폴백
+                apiBannerCreate: '/api/app-banners/', // 앱 배너 생성 (DRF ViewSet)
             };
 
             // -------- DOM --------
@@ -278,7 +349,7 @@
             const btnAddTmpl = document.getElementById('btn-add-template');
             const sel = document.getElementById('templateSelect');
 
-            // 모달
+            // 미리보기 모달
             const $mask = document.getElementById('tmpl-modal-mask');
             const $title = document.getElementById('tmpl-modal-title');
             const $frame = document.getElementById('tmpl-modal-frame');
@@ -288,7 +359,24 @@
             const $use = document.getElementById('tmpl-modal-use');
             let currentTid = null;
 
+            // 배너 모달
+            const $bMask = document.getElementById('banner-modal-mask');
+            const $bClose = document.getElementById('banner-modal-close');
+            const $bText = document.getElementById('banner-text');
+            const $bCta = document.getElementById('banner-cta');
+            const $bStarts = document.getElementById('banner-starts');
+            const $bEnds = document.getElementById('banner-ends');
+            const $bPrio = document.getElementById('banner-priority');
+            const $bActive = document.getElementById('banner-active');
+            const $bSubmit = document.getElementById('banner-submit');
+
             // -------- 유틸 --------
+            function getCookie(name) {
+                const value = `; ${document.cookie}`;
+                const parts = value.split(`; ${name}=`);
+                if (parts.length === 2) return parts.pop().split(';').shift();
+            }
+
             function openModal(opts) {
                 currentTid = opts.tid || null;
                 $title.textContent = opts.title || '미리보기';
@@ -324,6 +412,88 @@
                 if (!currentTid) return closeModal();
                 location.href = URLS.newFromTemplate(currentTid);
             });
+
+            function openBannerModal() {
+                // 기본값 세팅: starts_at = 지금(로컬)
+                try {
+                    const now = new Date();
+                    const pad = (n) => String(n).padStart(2, '0');
+                    const local = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+                    $bStarts.value = local;
+                } catch {}
+                $bText.value = '';
+                $bCta.value = '';
+                $bEnds.value = '';
+                $bPrio.value = '0';
+                $bActive.checked = true;
+
+                $bMask.style.display = 'flex';
+            }
+
+            function closeBannerModal() {
+                $bMask.style.display = 'none';
+            }
+            $bClose.addEventListener('click', closeBannerModal);
+            $bMask.addEventListener('click', (e) => {
+                if (e.target === $bMask) closeBannerModal();
+            });
+
+            async function submitBanner() {
+                const text = ($bText.value || '').trim();
+                if (!text) {
+                    alert('텍스트는 필수입니다.');
+                    return;
+                }
+
+                const cta_url = ($bCta.value || '').trim();
+                const starts_at_local = ($bStarts.value || '').trim(); // datetime-local (로컬)
+                const ends_at_local = ($bEnds.value || '').trim();
+                const priority = Number($bPrio.value || 0);
+                const is_active = !!$bActive.checked;
+
+                // 로컬 datetime → ISO(UTC) 변환
+                function toIsoOrNull(dtLocal) {
+                    if (!dtLocal) return null;
+                    const d = new Date(dtLocal);
+                    const iso = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString(); // Z기준
+                    return iso;
+                }
+
+                const payload = {
+                    text,
+                    cta_url,
+                    starts_at: starts_at_local ? toIsoOrNull(starts_at_local) : null, // 백엔드에서 null은 "즉시"로 처리 가능
+                    ends_at: ends_at_local ? toIsoOrNull(ends_at_local) : null,
+                    priority,
+                    is_active
+                };
+
+                const csrftoken = getCookie('csrftoken');
+                try {
+                    const res = await fetch(URLS.apiBannerCreate, {
+                        method: 'POST',
+                        credentials: 'same-origin',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': csrftoken || ''
+                        },
+                        body: JSON.stringify(payload)
+                    });
+
+                    if (res.ok) {
+                        alert('앱 배너 공지가 생성되었습니다. (활성 시 즉시 노출)');
+                        closeBannerModal();
+                    } else {
+                        const txt = await res.text();
+                        console.warn('banner create non-OK:', res.status, txt);
+                        alert('생성에 실패했습니다. (' + res.status + ')');
+                    }
+                } catch (e) {
+                    console.error('banner create error', e);
+                    alert('네트워크 오류로 실패했습니다.');
+                }
+            }
+            document.getElementById('banner-submit').addEventListener('click', submitBanner);
 
             // -------- 동작 --------
             async function createFromTemplate(tid) {
@@ -369,6 +539,7 @@
                     if (!action) {
                         if (/미리보기/.test(label)) action = 'preview';
                         else if (/생성|만들기/.test(label)) action = 'create';
+                        else if (/앱에 띄우기/.test(label)) action = 'banner';
                     }
 
                     const card = btn.closest('[data-template-id]');
@@ -381,26 +552,23 @@
                     e.preventDefault();
                     if (action === 'create') createFromTemplate(tid);
                     if (action === 'preview') previewTemplate(tid, ttitle);
+                    if (action === 'banner') openBannerModal();
                 });
             }
 
             // 상단 버튼
-            if (btnSearch)
-                btnSearch.addEventListener('click', function() {
-                    const key = ((q && q.value) || '').trim();
-                    if (!key) return;
-                    // 검색 결과 페이지가 있다면 거기로 이동
-                    location.href = '/dashboard/contents/?q=' + encodeURIComponent(key);
-                });
-            if (btnNew)
-                btnNew.addEventListener('click', function() {
-                    const v = sel && sel.value ? '?template=' + encodeURIComponent(sel.value) : '';
-                    location.href = URLS.newContent + v;
-                });
-            if (btnAddTmpl)
-                btnAddTmpl.addEventListener('click', function() {
-                    location.href = URLS.addTemplate;
-                });
+            if (btnSearch) btnSearch.addEventListener('click', function() {
+                const key = ((q && q.value) || '').trim();
+                if (!key) return;
+                location.href = '/dashboard/contents/?q=' + encodeURIComponent(key);
+            });
+            if (btnNew) btnNew.addEventListener('click', function() {
+                const v = sel && sel.value ? '?template=' + encodeURIComponent(sel.value) : '';
+                location.href = URLS.newContent + v;
+            });
+            if (btnAddTmpl) btnAddTmpl.addEventListener('click', function() {
+                location.href = URLS.addTemplate;
+            });
 
             // 접근성: 카드 타이틀 클릭 → 미리보기
             document.querySelectorAll('[data-template-id] .tmpl-title').forEach(function(el) {

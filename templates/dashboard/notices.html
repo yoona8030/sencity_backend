@@ -10,7 +10,9 @@
     <link rel="icon" href="{% static 'dashboard/images/favicon.ico' %}" sizes="any" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" />
     <link rel="stylesheet" href="{% static 'dashboard/css/dashboard.css' %}?v=fit-2025-09-19" />
-    <link rel="stylesheet" href="{% static 'dashboard/css/notices.css' %}?v=2025-09-20" />
+    <!-- ✅ 분리된 공지 전용 CSS -->
+    <link rel="stylesheet" href="{% static 'dashboard/css/notices.css' %}?v=2025-09-20-2" />
+    <script src="{% static 'dashboard/push.js' %}?v=2025-10-01-1"></script>
 </head>
 
 <body class="page-notices">
@@ -28,32 +30,16 @@
             <hr />
             <nav class="sidebar-menu">
                 <div class="menu-group">사이트 관리</div>
-                <a href="{% url 'dashboard:home' %}" class="menu-item">
-                    <i class="fa-solid fa-th-large"></i> 대시보드
-                </a>
-                <a href="{% url 'dashboard:cctv' %}" class="menu-item">
-                    <i class="fa-solid fa-camera"></i> CCTV 관리
-                </a>
-                <a href="{% url 'dashboard:reports' %}" class="menu-item">
-                    <i class="fa-solid fa-tv"></i> 신고 처리 및 관리
-                </a>
-                <a href="{% url 'dashboard:settings' %}" class="menu-item">
-                    <i class="fa-solid fa-gear"></i> 설정
-                </a>
-                <a href="{% url 'dashboard:users' %}" class="menu-item">
-                    <i class="fa-solid fa-user"></i> 사용자 관리
-                </a>
+                <a href="{% url 'dashboard:home' %}" class="menu-item"><i class="fa-solid fa-th-large"></i> 대시보드</a>
+                <a href="{% url 'dashboard:cctv' %}" class="menu-item"><i class="fa-solid fa-camera"></i> CCTV 관리</a>
+                <a href="{% url 'dashboard:reports' %}" class="menu-item"><i class="fa-solid fa-tv"></i> 신고 처리 및 관리</a>
+                <a href="{% url 'dashboard:settings' %}" class="menu-item"><i class="fa-solid fa-gear"></i> 설정</a>
+                <a href="{% url 'dashboard:users' %}" class="menu-item"><i class="fa-solid fa-user"></i> 사용자 관리</a>
 
                 <div class="menu-group">콘텐츠 및 통계</div>
-                <a href="{% url 'dashboard:analytics' %}" class="menu-item">
-                    <i class="fa-solid fa-chart-column"></i> 데이터 분석 및 통계
-                </a>
-                <a href="{% url 'dashboard:contents' %}" class="menu-item">
-                    <i class="fa-solid fa-file-lines"></i> 콘텐츠 관리
-                </a>
-                <a href="{% url 'dashboard:notices' %}" class="menu-item active">
-                    <i class="fa-solid fa-bell"></i> 공지 설정
-                </a>
+                <a href="{% url 'dashboard:analytics' %}" class="menu-item"><i class="fa-solid fa-chart-column"></i> 데이터 분석 및 통계</a>
+                <a href="{% url 'dashboard:contents' %}" class="menu-item"><i class="fa-solid fa-file-lines"></i> 콘텐츠 관리</a>
+                <a href="{% url 'dashboard:notices' %}" class="menu-item active"><i class="fa-solid fa-bell"></i> 공지 설정</a>
             </nav>
         </aside>
 
@@ -68,11 +54,12 @@
                         <div class="section-header">
                             <div class="section-actions-left">
                                 <button type="button" class="btn primary">＋ 새 공지</button>
+
                                 <select id="scope" class="input select">
-                    <option value="">전체</option>
-                    <option value="global">그룹</option>
-                    <option value="personal">개인</option>
-                  </select>
+                  <option value="">전체</option>
+                  <option value="global">그룹</option>
+                  <option value="personal">개인</option>
+                </select>
                             </div>
 
                             <div class="section-actions-right">
@@ -80,6 +67,11 @@
                                     <input id="q" class="input" placeholder="유형/상태 변경 내용 검색" />
                                     <button id="search" class="btn">검색</button>
                                 </div>
+
+                                <!-- ✅ 선택 공지 푸시 버튼 -->
+                                <button id="btn-push-open" class="btn danger" title="선택 공지를 푸시로 발송">
+                  <i class="fa-solid fa-paper-plane"></i> 선택 공지 푸시 전송
+                </button>
                             </div>
                         </div>
 
@@ -118,35 +110,64 @@
         </main>
     </div>
 
-    <script>
-        var API = '/dashboard/api/notices/';
+    <!-- ✅ 푸시 전송 모달 -->
+    <div id="pushModal" class="modal-backdrop" aria-hidden="true">
+        <div class="modal" role="dialog" aria-modal="true">
+            <div class="modal-header">선택 공지 푸시 전송</div>
+            <div class="modal-body">
+                <div>
+                    <label class="text-muted">제목</label>
+                    <input id="pm-title" class="input" maxlength="80" />
+                </div>
+                <div>
+                    <label class="text-muted">본문</label>
+                    <textarea id="pm-body" rows="6" class="input"></textarea>
+                    <div class="text-muted">※ 앱이 종료 상태여도 보이게 하려면 제목/본문이 있는 notification 전송이 필요합니다.</div>
+                </div>
+                <details>
+                    <summary>대상 옵션 (기본: 전체)</summary>
+                    <div style="display:grid; gap:6px; margin-top:6px;">
+                        <label class="text-muted">특정 사용자 ID 쉼표로 입력 (예: 12,34,56)</label>
+                        <input id="pm-userids" class="input" placeholder="비우면 전체 발송" />
+                    </div>
+                </details>
+            </div>
+            <div class="modal-footer">
+                <button id="pm-cancel" class="btn secondary">취소</button>
+                <button id="pm-send" class="btn danger"><i class="fa-solid fa-paper-plane"></i> 전송</button>
+            </div>
+        </div>
+    </div>
 
+    <script>
+        // ====== 설정 ======
+        var API = '/dashboard/api/notices/';
+        var PUSH_API = '/api/push/broadcast/';
+
+        // ====== 엘리먼트 ======
         var els = {
-            tbody: function() {
-                return document.getElementById('tbody');
-            },
-            scope: function() {
-                return document.getElementById('scope');
-            },
-            q: function() {
-                return document.getElementById('q');
-            },
-            btn: function() {
-                return document.getElementById('search');
-            },
+            tbody: () => document.getElementById('tbody'),
+            scope: () => document.getElementById('scope'),
+            q: () => document.getElementById('q'),
+            btn: () => document.getElementById('search'),
+            btnPushOpen: () => document.getElementById('btn-push-open'),
+            modal: () => document.getElementById('pushModal'),
+            pmTitle: () => document.getElementById('pm-title'),
+            pmBody: () => document.getElementById('pm-body'),
+            pmUserIds: () => document.getElementById('pm-userids'),
+            pmCancel: () => document.getElementById('pm-cancel'),
+            pmSend: () => document.getElementById('pm-send'),
         };
 
         function escapeHtml(s) {
             s = String(s == null ? '' : s);
-            return s.replace(/[&<>"']/g, function(m) {
-                return {
-                    '&': '&amp;',
-                    '<': '&lt;',
-                    '>': '&gt;',
-                    '"': '&quot;',
-                    "'": '&#39;',
-                }[m];
-            });
+            return s.replace(/[&<>"']/g, m => ({
+                '&': '&amp;',
+                '<': '&lt;',
+                '>': '&gt;',
+                '"': '&quot;',
+                "'": '&#39;'
+            }[m]));
         }
 
         function nl2br(s) {
@@ -156,7 +177,7 @@
         function detailRow(id, html) {
             var tr = document.createElement('tr');
             tr.className = 'detail-row';
-            tr.setAttribute('data-for', id);
+            tr.dataset.for = id;
             tr.innerHTML = '<td class="detail-cell" colspan="5"><div class="detail-box">' + html + '</div></td>';
             return tr;
         }
@@ -166,31 +187,36 @@
             if (d) d.remove();
         }
 
+        function clearSelected() {
+            els.tbody().querySelectorAll('tr.selected').forEach(tr => tr.classList.remove('selected'));
+        }
+
+        function selectRow(tr) {
+            clearSelected();
+            tr.classList.add('selected');
+        }
+
         async function openDetail(id, afterTr) {
             var opened = els.tbody().querySelector('tr.detail-row[data-for="' + id + '"]');
             if (opened) {
                 closeDetail(id);
                 return;
             }
-
             var loading = detailRow(id, '<div class="detail-loading">불러오는 중…</div>');
             afterTr.insertAdjacentElement('afterend', loading);
 
             try {
-                var url = new URL(API, window.location.origin);
+                var url = new URL(API, location.origin);
                 url.searchParams.set('id', id);
                 var r = await fetch(url.toString(), {
-                    credentials: 'same-origin',
+                    credentials: 'same-origin'
                 });
                 if (!r.ok) throw new Error('load failed');
                 var data = await r.json();
-                var n = data.notice || {};
+                var n = data.notice || data || {};
                 var content = String(n.content || '').trim();
-
-                // 본문
                 loading.querySelector('.detail-box').innerHTML = content ? nl2br(content) : '내용이 없습니다';
 
-                // 제목 셀 갱신(백엔드가 내려준 title_suggest 우선)
                 var row = els.tbody().querySelector('tr[data-id="' + id + '"]');
                 if (row) {
                     var cell = row.querySelector('.title-cell');
@@ -206,82 +232,104 @@
 
         async function loadList(page) {
             page = page || 1;
-            var url = new URL(API, window.location.origin);
+            var url = new URL(API, location.origin);
             url.searchParams.set('page', page);
             url.searchParams.set('page_size', 20);
 
             var sc = els.scope().value;
             var q = (els.q().value || '').trim();
-
-            // 필터: scope=global|personal 사용
             if (sc === 'global') url.searchParams.set('scope', 'global');
             else if (sc === 'personal') url.searchParams.set('scope', 'personal');
-
             if (q) url.searchParams.set('q', q);
 
             els.tbody().innerHTML = '<tr><td colspan="5" class="empty">불러오는 중…</td></tr>';
-
             try {
                 var r = await fetch(url.toString(), {
-                    credentials: 'same-origin',
+                    credentials: 'same-origin'
                 });
                 if (!r.ok) throw new Error('list failed');
                 var d = await r.json();
                 var html = '';
-                var arr = d.results || [];
-                for (var i = 0; i < arr.length; i++) {
-                    var n = arr[i];
+                (d.results || []).forEach(function(n) {
                     var safeTitle = escapeHtml(n.title_suggest || n.title || '');
-
-                    html +=
-                        '<tr data-id="' +
-                        n.id +
-                        '" data-type="' +
-                        (n.type || '') +
-                        '">' +
-                        '<td class="id-cell">' +
-                        n.id +
-                        '</td>' +
-                        '<td class="title-cell" role="button" tabindex="0">' +
-                        safeTitle +
-                        '</td>' +
-                        '<td>' +
-                        escapeHtml(n.scope || '') +
-                        '</td>' +
-                        '<td>' +
-                        escapeHtml(n.type || '') +
-                        '</td>' +
-                        '<td>' +
-                        escapeHtml(n.created_at || '') +
-                        '</td>' +
+                    html += '<tr data-id="' + n.id + '" data-type="' + (n.type || '') + '">' +
+                        '<td class="id-cell">' + n.id + '</td>' +
+                        '<td class="title-cell" role="button" tabindex="0">' + safeTitle + '</td>' +
+                        '<td>' + escapeHtml(n.scope || '') + '</td>' +
+                        '<td>' + escapeHtml(n.type || '') + '</td>' +
+                        '<td>' + escapeHtml(n.created_at || '') + '</td>' +
                         '</tr>';
-                }
+                });
                 els.tbody().innerHTML = html || '<tr><td colspan="5" class="empty">표시할 공지가 없습니다</td></tr>';
             } catch (e) {
                 els.tbody().innerHTML = '<tr><td colspan="5" class="empty error">불러오기에 실패했습니다</td></tr>';
             }
         }
 
-        document.addEventListener('DOMContentLoaded', function() {
-            // 제목 클릭으로 상세 토글
-            els.tbody().addEventListener('click', function(e) {
-                var cell = e.target.closest('td.title-cell');
-                if (!cell) return;
-                var tr = cell.closest('tr');
-                var id = tr && tr.getAttribute('data-id');
-                if (!id) return;
-                openDetail(id, tr);
+        // 모달
+        function openPushModal(prefill) {
+            els.pmTitle().value = prefill.title || '공지';
+            els.pmBody().value = prefill.body || '';
+            els.pmUserIds().value = '';
+            els.modal().style.display = 'flex';
+            els.modal().setAttribute('aria-hidden', 'false');
+        }
+
+        function closePushModal() {
+            els.modal().style.display = 'none';
+            els.modal().setAttribute('aria-hidden', 'true');
+        }
+
+        async function sendBroadcastPushLocal(payload) {
+            if (window.sendBroadcastPush) return window.sendBroadcastPush(payload);
+
+            function getCookie(name) {
+                let v = null;
+                if (document.cookie && document.cookie !== '') {
+                    document.cookie.split(';').map(s => s.trim()).forEach(c => {
+                        if (c.startsWith(name + '=')) v = decodeURIComponent(c.slice(name.length + 1));
+                    });
+                }
+                return v;
+            }
+            const csrftoken = getCookie('csrftoken');
+            const res = await fetch(PUSH_API, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrftoken
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify(payload)
             });
-            // 키보드 접근성(Enter/Space)
+            if (!res.ok) throw new Error(`HTTP ${res.status}: ` + await res.text());
+            return res.json();
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            // 행 클릭: 선택 + 제목 셀은 상세 토글
+            els.tbody().addEventListener('click', function(e) {
+                var tr = e.target.closest('tr');
+                if (!tr) return;
+                selectRow(tr);
+
+                if (tr) {
+                    var id = tr.getAttribute('data-id');
+                    if (id) openDetail(id, tr);
+                }
+            });
+
+            // 키보드 접근성
             els.tbody().addEventListener('keydown', function(e) {
                 var cell = e.target.closest('td.title-cell');
                 if (!cell) return;
                 if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault();
                     var tr = cell.closest('tr');
-                    var id = tr && tr.getAttribute('data-id');
-                    if (!id) return;
-                    openDetail(id, tr);
+                    if (!tr) return;
+                    selectRow(tr);
+                    var id = tr.getAttribute('data-id');
+                    if (id) openDetail(id, tr);
                 }
             });
 
@@ -300,7 +348,89 @@
                 }, 300);
             });
 
-            // 첫 로드: SSR 그대로 볼거면 주석 유지
+            // 푸시 열기
+            els.btnPushOpen().addEventListener('click', async function() {
+                var tr = els.tbody().querySelector('tr.selected');
+                if (!tr) {
+                    alert('푸시로 보낼 공지를 먼저 선택해 주세요. (행을 클릭)');
+                    return;
+                }
+                var id = tr.getAttribute('data-id');
+
+                // 제목/본문 프리필
+                var cellEl = tr.querySelector('.title-cell');
+                var title = (cellEl && cellEl.textContent ? cellEl.textContent.trim() : '') || '공지';
+                var body = '';
+
+                try {
+                    var url = new URL(API, window.location.origin);
+                    url.searchParams.set('id', id);
+                    var r = await fetch(url.toString(), {
+                        credentials: 'same-origin'
+                    });
+                    if (r.ok) {
+                        var d = await r.json();
+                        var n = d.notice || {};
+                        body = String(n.content || '').trim();
+                        var maybeTitle = String((n.title_suggest || n.title || '')).trim();
+                        if (maybeTitle) {
+                            title = maybeTitle;
+                        }
+                    }
+                } catch (e) { /* 무시하고 기본값 사용 */ }
+
+                openPushModal({
+                    title: title,
+                    body: body
+                });
+            });
+
+            // 모달 버튼
+            els.pmCancel().addEventListener('click', closePushModal);
+            els.pmSend().addEventListener('click', async function() {
+                var sel = els.tbody().querySelector('tr.selected');
+                if (!sel) {
+                    alert('푸시로 보낼 공지를 먼저 선택해 주세요.');
+                    return;
+                }
+                var title = String(els.pmTitle().value || '').trim();
+                var body = String(els.pmBody().value || '').trim();
+                var users = String(els.pmUserIds().value || '').trim();
+
+                var user_ids = null;
+                if (users) {
+                    var parts = users.split(',');
+                    user_ids = [];
+                    for (var i = 0; i < parts.length; i++) {
+                        var n = parseInt(parts[i].trim(), 10);
+                        if (!isNaN(n)) user_ids.push(n);
+                    }
+                    if (user_ids.length === 0) user_ids = null;
+                }
+
+                if (!title && !body) {
+                    alert('제목 또는 본문 중 하나는 필요합니다.');
+                    return;
+                }
+
+                try {
+                    var res = await sendBroadcastPushLocal({
+                        title: title,
+                        body: body,
+                        data: {
+                            kind: 'notice'
+                        },
+                        user_ids: user_ids
+                    });
+                    alert('푸시 전송 완료\nsuccess=' + res.success + ', failure=' + res.failure);
+                    closePushModal();
+                } catch (e) {
+                    console.error(e);
+                    alert('푸시 전송 실패: ' + e.message);
+                }
+            });
+
+            // SSR 유지 시 목록 자동 로드는 생략
             // loadList(1);
         });
     </script>

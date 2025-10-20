@@ -1,7 +1,7 @@
 # api/models.py
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
-from django.db.models import Q  
+from django.db.models import Q
 from datetime import datetime
 from django.db import models
 from django.conf import settings
@@ -23,7 +23,7 @@ class Admin(models.Model):
 
     def __str__(self):
         return self.display_name or f'Admin({self.email})'
-    
+
 class User(AbstractUser):
     email = models.EmailField(unique=True)
     telphone = models.CharField(max_length=20, blank=True)
@@ -64,8 +64,8 @@ class Animal(models.Model):
 
 class SearchHistory(models.Model):
     user = models.ForeignKey(
-        User, 
-        on_delete=models.CASCADE, 
+        User,
+        on_delete=models.CASCADE,
         related_name='search_histories'
     )
     keyword = models.CharField(max_length=100)
@@ -78,6 +78,15 @@ class SearchHistory(models.Model):
         verbose_name = 'SearchHistory'
         verbose_name_plural = 'SearchHistory'
         ordering = ['-searched_at']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'keyword'],
+                name='uniq_searchhistory_user_keyword',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['user', 'keyword']),
+        ]
 
 class Location(models.Model):
     latitude = models.DecimalField(max_digits=9, decimal_places=6, db_index=True)
@@ -93,7 +102,7 @@ class Location(models.Model):
             models.Index(fields=["city", "district"]),
             models.Index(fields=["latitude", "longitude"]),
         ]
-    
+
         constraints = [
             models.UniqueConstraint(
                 fields=['latitude', 'longitude', 'city', 'district', 'region', 'address'],
@@ -132,7 +141,31 @@ class SavedPlace(models.Model):
 
     def __str__(self):
         return f"{self.user} saved {self.name}"
-    
+
+# 지도 화면 배너 알림
+class AppBanner(models.Model):
+    text = models.CharField(max_length=140)
+    cta_url = models.CharField(max_length=300, blank=True, default="") # 눌렀을 때 이동할 URL
+    audience = models.CharField(max_length=20, default="all") # 대상 필터(기본: 전체)
+    starts_at  = models.DateTimeField(default=timezone.now) # 노출 기간
+    ends_at = models.DateTimeField(null=True, blank=True)
+    priority = models.IntegerField(default=0)
+    is_active  = models.BooleanField(default=True) # 운영 편의
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-priority", "-id"]
+
+    def is_live(self):
+        now = timezone.now()
+        if not self.is_active:
+            return False
+        if self.starts_at and self.starts_at > now:
+            return False
+        if self.ends_at   and self.ends_at   < now:
+            return False
+        return True
+
 class Report(models.Model):
     STATUS_CHOICES = [
         ('checking',  '접수 완료'),
@@ -165,8 +198,8 @@ class Report(models.Model):
     )
 
     report_date = models.DateTimeField(db_index=True)
-    image = models.ImageField(upload_to='reports/', null=True, blank=True)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='checking') 
+    image = models.ImageField(upload_to='reports/%Y/%m/%d/', null=True, blank=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='checking')
 
     def __str__(self):
         animal_name = getattr(self.animal, 'name_kor', str(self.animal)) if self.animal else "Unknown"
@@ -175,7 +208,7 @@ class Report(models.Model):
         else:
             date_str = str(self.report_date)
         return f"{self.user} – {animal_name} ({date_str})"
-    
+
     class Meta:
         ordering = ['-report_date']
         indexes = [
@@ -184,7 +217,7 @@ class Report(models.Model):
             models.Index(fields=['animal', 'report_date']),
             models.Index(fields=['user', 'report_date']),
         ]
-        
+
 class Notification(models.Model):
     TYPE_CHOICES = [
         ('group', '그룹 알림'),
@@ -211,7 +244,7 @@ class Notification(models.Model):
 
     report = models.ForeignKey('Report', null=True, blank=True,
                                on_delete=models.SET_NULL, related_name='notifications')
-    
+
     type = models.CharField(max_length=10, choices=TYPE_CHOICES, db_index=True)
     reply = models.TextField(null=True, blank=True)
     status_change = models.CharField(
@@ -325,3 +358,16 @@ class Profile(models.Model):
 
     def __str__(self):
         return f'{self.user} profile'
+
+# 토큰 저장 API
+class DeviceToken(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
+    token = models.CharField(max_length=200, unique=True)
+    platform = models.CharField(max_length=20, default='android')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        who = getattr(self.user, "username", None) or "anon"
+        return f"{who}:{self.platform}:{self.token[:12]}…"
+

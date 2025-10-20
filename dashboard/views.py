@@ -19,6 +19,7 @@ from django.utils.html import strip_tags
 from django.db import models
 from django.db.models import Count, Q, F, Value, Case, When, CharField, OuterRef, Subquery
 from django.db.models.functions import TruncMonth, Coalesce
+from django.db.models.fields.files import FieldFile
 from django.views.decorators.http import require_http_methods, require_GET
 from django.db.models.fields.related import ForeignObjectRel  # ← 추가
 
@@ -50,6 +51,14 @@ User = get_user_model()
 # ─────────────────────────────────────
 # 공통 헬퍼
 # ─────────────────────────────────────
+
+@login_required
+def home(request):
+    return render(request, 'dashboard/home.html')
+
+@login_required
+def reports(request):
+    return render(request, 'dashboard/reports.html')
 
 def _is_staff(user):
     return bool(user and user.is_authenticated and (user.is_staff or user.is_superuser))
@@ -225,6 +234,59 @@ def _latest_feedback_text(rep):
             if v:
                 return str(v)
     return None
+
+# 맨 위 import 근처에 추가 (파일 상단부)
+from django.db.models.fields.files import FieldFile
+
+def _first_image_field_url(obj, request=None) -> str:
+    """
+    Report 인스턴스에서 이미지 후보 필드를 순회해 첫 번째 URL을 반환.
+    FileField/ ImageField 가 비어 있을 때 .url 접근으로 예외가 나지 않도록
+    반드시 f.name 존재 여부로 선행 검사한다.
+    """
+    CANDIDATES = ("photo", "image", "img", "picture", "photo1", "photo_url")
+
+    for name in CANDIDATES:
+        if not hasattr(obj, name):
+            continue
+
+        f = getattr(obj, name, None)
+
+        # 1) FileField / ImageField 계열
+        if isinstance(f, FieldFile):
+            # 파일이 비어 있으면 f.name이 빈 문자열/None 입니다.
+            if getattr(f, "name", None):
+                try:
+                    url = f.url  # name이 있을 때만 안전
+                    if url:
+                        if request is not None and url.startswith("/"):
+                            return request.build_absolute_uri(url)
+                        return url
+                except Exception:
+                    # 스토리지 예외 등은 조용히 패스하고 다음 후보로
+                    pass
+            continue
+
+        # 2) 문자열 URL이 모델에 저장된 경우 (CharField 등)
+        if isinstance(f, str):
+            s = f.strip()
+            if s:
+                # 절대/상대 모두 허용. 상대면 절대 URL로 변환
+                if request is not None and s.startswith("/"):
+                    return request.build_absolute_uri(s)
+                return s
+
+    return ""
+
+def _reporter_name_or_user(r) -> str:
+    u = getattr(r, "user", None)
+    if u:
+        nm = (getattr(u, "get_full_name", lambda: "")() or getattr(u, "username", "") or getattr(u, "email", ""))
+        if nm: return nm
+    for k in ("reporter_name", "reporter", "contact_name", "writer_name"):
+        v = getattr(r, k, None)
+        if v: return str(v)
+    return "익명"
 
 # ── Notification 표시용 ─────────────────────────────
 
@@ -839,7 +901,8 @@ def api_reports(request):
             "region": _region_value(r),
             "status": getattr(r, "status", "") or "",
             "created_at": timezone.localtime(dt).strftime("%Y-%m-%d %H:%M") if dt else "",
-            "reporter": getattr(getattr(r, "user", None), "username", "") or "",
+            "reporter": _reporter_name_or_user(r),           # ✅ 사용자 표시
+            "image_url": _first_image_field_url(r, request), # ✅ 이미지 URL
         })
 
     return JsonResponse({

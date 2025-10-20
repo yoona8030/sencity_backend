@@ -1,4 +1,4 @@
-import requests, ipaddress, socket
+import requests, ipaddress, socket, re
 from typing import Optional
 from urllib.parse import urlparse, urlencode
 from datetime import datetime, time, timedelta
@@ -26,30 +26,38 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import mixins, viewsets, status, permissions
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from rest_framework.exceptions import PermissionDenied, ValidationError
-from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.decorators import action, api_view, permission_classes, authentication_classes
 from rest_framework.response import Response
 from rest_framework.request import Request
 from rest_framework.views import APIView
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from rest_framework.authentication import SessionAuthentication
+try:
+    from rest_framework_simplejwt.authentication import JWTAuthentication
+    HAVE_JWT = True
+except Exception:
+    HAVE_JWT = False
 
+from .push import send_push_only
 from .ml import predict_topk, predict_topk_grouped  # 모델 유틸
 from .utils import is_admin
+from .utils.fcm import send_fcm_to_token, send_fcm_to_topic
 from .models import (
     User, Animal, SearchHistory, Location, Report, Notification,
-    Feedback, Admin, Statistic, SavedPlace, Profile
+    Feedback, Admin, Statistic, SavedPlace, Profile, DeviceToken, AppBanner
 )
 from .serializers import (
     UserSerializer, UserSignUpSerializer,
-    AnimalSerializer, SearchHistorySerializer,
-    LocationSerializer, ReportSerializer,
+    AnimalSerializer, SearchHistorySerializer, SearchHistoryCreateSerializer,
+    LocationSerializer, ReportSerializer, ReportCreateSerializer,
     NotificationSerializer, FeedbackSerializer,
     StatisticSerializer, SavedPlaceCreateSerializer, SavedPlaceReadSerializer,
     AdminSerializer, ProfileSerializer,
     UserProfileSerializer,
-    ReportNoAuthCreateSerializer,
+    ReportNoAuthCreateSerializer, DeviceTokenSerializer,
+    AppBannerActiveSerializer, AppBannerReadSerializer, AppBannerSerializer
 )
 from .filters import ReportFilter, NotificationFilter
 
@@ -75,6 +83,10 @@ def _animal_name_field(report_model) -> Optional[str]:
 # ─────────────────────────────────────────────────────────────
 # Permissions
 # ─────────────────────────────────────────────────────────────
+class IsAdmin(permissions.BasePermission):
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_staff)
+
 class IsAdminOrReadGroup(permissions.BasePermission):
     """
     SAFE_METHODS:
@@ -329,13 +341,16 @@ class SearchHistoryViewSet(
     mixins.DestroyModelMixin,
     viewsets.GenericViewSet
 ):
-    queryset = SearchHistory.objects.all()
-    serializer_class = SearchHistorySerializer
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return self.queryset.filter(user=self.request.user).order_by('-id')
+        return SearchHistory.objects.filter(user=self.request.user).order_by('-id')
+
+    def get_serializer_class(self):
+        return (SearchHistoryCreateSerializer
+                if self.action == 'create'
+                else SearchHistorySerializer)
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
@@ -480,6 +495,45 @@ class SavedPlaceViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
+class AppBannerViewSet(viewsets.ModelViewSet):
+    queryset = AppBanner.objects.all()
+    authentication_classes = [JWTAuthentication]
+    # 대시보드에서만 작성/수정 → 관리자만
+    permission_classes = [IsAdminUser]
+    serializer_class = AppBannerSerializer
+
+    # 생성 시 FCM 데이터푸시로 즉시 노출 트리거(선택)
+    def perform_create(self, serializer):
+        obj = serializer.save()
+        try:
+            # 기존 브로드캐스트 유틸 재사용
+            send_push_only(
+                title="공지",
+                body=obj.text,
+                data={"kind":"banner","banner_id":str(obj.id),"text":obj.text,"cta_url":obj.cta_url or ""},
+                user_ids=None,  # 전체
+            )
+        except Exception as e:
+            # 실패해도 API 자체는 성공
+            print("[FCM] banner push failed:", e)
+
+# 활성 배너 조회(앱에서 사용, 인증 불필요)
+class AppBannerActiveList(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def get(self, request):
+        now = timezone.now()
+        qs = (AppBanner.objects
+              .filter(is_active=True)
+              .filter(Q(starts_at__isnull=True) | Q(starts_at__lte=now))
+              .filter(Q(ends_at__isnull=True) | Q(ends_at__gte=now))
+              .order_by('-priority', '-id'))
+
+        # (선택) 최근 1개만
+        top = qs.first()
+        if not top:
+            return Response({"data": None})
+        return Response({"data": AppBannerReadSerializer(top).data})
 
 class ReportViewSet(mixins.ListModelMixin,
                     mixins.CreateModelMixin,
@@ -490,27 +544,71 @@ class ReportViewSet(mixins.ListModelMixin,
     """
     신고 CRUD
     - 일반 사용자: 본인 신고만
-    - 관리자: 전체
+    - 관리자/스태프: 전체
     """
     queryset = Report.objects.select_related('animal', 'user', 'location').all()
     serializer_class = ReportSerializer
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated]
 
+    # ✅ 파일 업로드를 위해 parser_classes 정확히 지정
+    parser_classes = [MultiPartParser, FormParser]
+
     filter_backends = [DjangoFilterBackend, OrderingFilter]
     filterset_class = ReportFilter
     ordering_fields = ['report_date']
     ordering = ['-report_date']
 
+    @action(detail=False, methods=['get'], url_path='summary')
+    def summary(self, request):
+        print('[summary] Authorization =', request.META.get('HTTP_AUTHORIZATION', ''))
+
     def get_queryset(self):
         user = self.request.user
         qs = Report.objects.select_related('animal', 'user', 'location')
-        return qs if user.is_superuser else qs.filter(user=user)
+        # ✅ staff/superuser는 전체, 그 외는 본인 것만
+        if getattr(user, 'is_superuser', False) or getattr(user, 'is_staff', False):
+            return qs
+        return qs.filter(user=user)
+
+    def get_permissions(self):
+        # ✅ 생성 허용 여부를 settings.ALLOW_ANON_REPORTS 로 토글
+        from django.conf import settings
+        allow_anon = getattr(settings, 'ALLOW_ANON_REPORTS', True)
+        if self.action == 'create':
+            return [AllowAny()] if allow_anon else [IsAuthenticated()]
+        return [IsAuthenticated()]
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return ReportCreateSerializer
+        return ReportSerializer
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        """
+        - 로그인 사용자는 Report.user에 연결
+        - 익명 허용일 때는 user=None 으로 저장
+        - 요청에 reporter_name 유사 필드가 오면 모델에 존재하는 경우에 한해 함께 저장
+        """
+        u = getattr(self.request, 'user', None)
+        data = self.request.data or {}
+        extra = {}
+
+        # 모델에 해당 필드가 실제로 있을 때만 반영되도록 방어적으로 처리
+        model_field_names = {f.name for f in Report._meta.get_fields()}
+        for k in ("reporter_name", "reporter", "contact_name", "writer_name"):
+            if k in data and k in model_field_names:
+                v = data.get(k)
+                if isinstance(v, str) and v.strip():
+                    extra[k] = v.strip()
+
+        if u and getattr(u, 'is_authenticated', False):
+            serializer.save(user=u, **extra)  # 로그인 사용자는 소유자 연결
+        else:
+            serializer.save(**extra)          # 익명 신고(허용된 경우)
 
     def perform_update(self, serializer):
+        # 상태 변경 시 알림 생성 로직 유지
         instance: Report = self.get_object()
         old_status = instance.status
         with transaction.atomic():
@@ -527,6 +625,10 @@ class ReportViewSet(mixins.ListModelMixin,
                 )
 
     def list(self, request, *args, **kwargs):
+        """
+        /api/reports/?from=YYYY-MM-DD&to=YYYY-MM-DD
+        날짜 필터는 report_date 필드 타입(Date vs DateTime)에 맞춰 적용
+        """
         queryset = self.filter_queryset(self.get_queryset())
 
         from_date = request.query_params.get("from")
@@ -567,7 +669,7 @@ class ReportViewSet(mixins.ListModelMixin,
         name_field = _animal_name_field(Report)
         if name_field:
             by_animal_rows = qs.values(animal_label=F(name_field)).annotate(c=Count('id'))
-            by_animal = { (r['animal_label'] or '미상'): r['c'] for r in by_animal_rows }
+            by_animal = {(r['animal_label'] or '미상'): r['c'] for r in by_animal_rows}
         else:
             by_animal = {'미상': total} if total else {}
 
@@ -582,9 +684,9 @@ class ReportViewSet(mixins.ListModelMixin,
         )
         rows = (
             lqs.annotate(area=area_expr)
-            .values('area')
-            .annotate(c=Count('id'))
-            .order_by('-c')
+               .values('area')
+               .annotate(c=Count('id'))
+               .order_by('-c')
         )
         by_region = {r['area']: r['c'] for r in rows}
 
@@ -660,7 +762,7 @@ class ReportViewSet(mixins.ListModelMixin,
                 "count": r['count']
             } for r in rows]
 
-        # 상위 4개 도시 + 기타 합치기 로직
+        # 상위 4개 도시 + 기타 합치기
         city_totals = {}
         for r in norm_rows:
             c = r['city']
@@ -1280,6 +1382,7 @@ class ChangePasswordView(APIView):
         return Response({'detail': '비밀번호가 변경되었습니다.'}, status=status.HTTP_200_OK)
 
 @api_view(["GET", "PUT", "PATCH"])
+@authentication_classes([JWTAuthentication])
 @permission_classes([IsAuthenticated])
 def user_profile(request):
     user = request.user
@@ -1328,93 +1431,9 @@ def dashboard_report_stats(request):
         "unresolved_reports": unresolved,
     })
 
-@require_GET
-@_require_login_json
-def dashboard_reports(request):
-    """
-    신고 리스트 (검색/페이지네이션)
-    GET  /api/dashboard/reports/?page=1&page_size=20&q=키워드
-    """
-    q = (request.GET.get("q") or "").strip()
-    page = int(request.GET.get("page") or 1)
-    page_size = int(request.GET.get("page_size") or 20)
-
-    # FK 미리 로드
-    qs = (Report.objects
-          .select_related("animal", "user", "location")
-          .order_by("-report_date"))
-
-    if q:
-        qs = qs.filter(
-            Q(animal__name_kor__icontains=q) | Q(animal__name__icontains=q) |
-            Q(location__region__icontains=q) | Q(location__city__icontains=q) | Q(location__district__icontains=q) |
-            Q(user__username__icontains=q) | Q(user__email__icontains=q)
-        )
-
-    p = Paginator(qs, page_size)
-    page_obj = p.get_page(page)
-
-    def animal_label(r: Report) -> str:
-        a = getattr(r, "animal", None)
-        if not a:
-            return ""
-        return getattr(a, "name_kor", None) or getattr(a, "name", None) or ""
-
-    def region_label(r: Report) -> str:
-        loc = getattr(r, "location", None)
-        if not loc:
-            return ""
-        # 표시 규칙: 구/군 > 시 > region > address
-        return (
-            (loc.district or "").strip()
-            or (loc.city or "").strip()
-            or (loc.region or "").strip()
-            or (loc.address or "").strip()
-        )
-
-    def row(r: Report):
-        return {
-            "id": r.id,
-            "title": "",
-            "animal": animal_label(r),
-            "region": region_label(r),
-            "status": r.status,
-            "created_at": timezone.localtime(r.report_date).strftime("%Y-%m-%d %H:%M"),
-            "reporter": (r.user.username if r.user_id else ""),
-            "photo_url": _abs_media_url(request, getattr(r, "image", None)),
-        }
-
-    return JsonResponse({
-        "results": [row(r) for r in page_obj.object_list],
-        "page": page_obj.number,
-        "total_pages": p.num_pages,
-        "count": p.count,
-    })
-
-@require_GET
-@_require_login_json
-def dashboard_reporters(request):
-    limit = int(request.GET.get("limit") or 10)
-    agg = (
-        Report.objects
-        .values("user__username")
-        .annotate(cnt=Count("id"))
-        .order_by("-cnt", "user__username")[:limit]
-    )
-
-    data = []
-    for row in agg:
-        reporter = (row["user__username"] or "(알수없음)")
-        data.append({
-            "reporter": reporter,  # ✅ 표준 키
-            "name": reporter,      # ✅ 임시 호환용(프론트가 r.name을 볼 수도 있으니)
-            "count": row["cnt"],
-        })
-
-    return JsonResponse({"results": data})
-
-@require_GET
-@_require_login_json
+@api_view(['GET'])
+@authentication_classes([JWTAuthentication])
+@permission_classes([IsAuthenticated])
 def dashboard_report_points(request):
     """
     GET /api/dashboard/report-points/?year=2025&animal=고라니
@@ -1473,5 +1492,154 @@ def dashboard_report_points(request):
             "region": (r["location__region"] or "").strip(),
             "address": (r["location__address"] or "").strip(),
         })
-    return JsonResponse(data, safe=False)
 
+    return Response(data)
+
+
+@require_GET
+@_require_login_json
+def dashboard_reporters(request):
+    limit = int(request.GET.get("limit") or 10)
+    agg = (
+        Report.objects
+        .values("user__username")
+        .annotate(cnt=Count("id"))
+        .order_by("-cnt", "user__username")[:limit]
+    )
+
+    data = []
+    for row in agg:
+        reporter = (row["user__username"] or "(알수없음)")
+        data.append({
+            "reporter": reporter,  # ✅ 표준 키
+            "name": reporter,      # ✅ 임시 호환용(프론트가 r.name을 볼 수도 있으니)
+            "count": row["cnt"],
+        })
+
+    return JsonResponse({"results": data})
+
+FCM_TOKEN_RE = re.compile(r'^[A-Za-z0-9:_\-]{100,}$')  # 안드 토큰 보통 140자 안팎
+
+# 토큰 저장 API
+class DeviceTokenViewSet(mixins.CreateModelMixin, viewsets.GenericViewSet):
+    queryset = DeviceToken.objects.all()
+    serializer_class = DeviceTokenSerializer
+    # authentication_classes = [JWTAuthentication]
+    permission_classes = [AllowAny]  # 로그인 전 등록 허용
+
+    @action(detail=False, methods=['post'], url_path='register-fcm', permission_classes=[AllowAny])
+    def register_fcm(self, request):
+        """
+        POST /api/devices/register-fcm/
+        body: { "token": "<FCM_TOKEN>", "platform": "android" }
+        """
+        token = (request.data.get('token') or '').strip()
+        platform = (request.data.get('platform') or 'android').strip().lower()
+
+        # 1) 형식 검증
+        if not token or not FCM_TOKEN_RE.match(token):
+            return Response({'detail': 'invalid token'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # 2) 업서트 (token은 unique 권장)
+        obj, _ = DeviceToken.objects.update_or_create(
+            token=token,
+            defaults={
+                'platform': platform,
+                'user': request.user if getattr(request, 'user', None) and request.user.is_authenticated else None,
+                'created_at': timezone.now(),  # 업데이트 타임 찍고 싶으면 updated_at 필드 사용
+            },
+        )
+        return Response({'ok': True})
+    def create(self, request, *args, **kwargs):
+        token = (request.data.get("token") or "").strip()
+        if token:
+            # 이미 있으면 200으로 돌려주기 (멱등성)
+            try:
+                obj = DeviceToken.objects.get(token=token)
+                ser = self.get_serializer(obj)
+                return Response(ser.data, status=status.HTTP_200_OK)
+            except DeviceToken.DoesNotExist:
+                pass
+        return super().create(request, *args, **kwargs)
+
+class PushBroadcastView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, IsAdminUser]
+
+    def post(self, request):
+        title = (request.data.get("title") or "").strip()
+        body  = (request.data.get("body")  or "").strip()
+        data  = request.data.get("data") or {}
+        user_ids = request.data.get("user_ids")
+
+        if not title and not body:
+            return Response({"detail": "title 또는 body 중 하나는 필요합니다."}, status=status.HTTP_400_BAD_REQUEST)
+
+        if user_ids is not None and not isinstance(user_ids, list):
+            return Response({"detail": "user_ids는 배열이어야 합니다. 예: [1,2,3]"}, status=status.HTTP_400_BAD_REQUEST)
+        if isinstance(user_ids, list):
+            if len(user_ids) == 0:
+                user_ids = None
+            else:
+                try:
+                    user_ids = [int(x) for x in user_ids]
+                except (TypeError, ValueError):
+                    return Response({"detail": "user_ids는 정수 배열이어야 합니다. 예: [1,2,3]"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # ✅ DB 기록 없이 FCM만 전송
+            ok, fail = send_push_only(
+                title=title or "공지",
+                body=body or "",
+                data=data,
+                user_ids=user_ids,
+            )
+        except Exception as e:
+            return Response({"detail": f"푸시 전송 중 오류가 발생했습니다: {e!s}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response({"success": ok, "failure": fail}, status=status.HTTP_200_OK)
+
+class FCMTestTokenView(APIView):
+    permission_classes = [permissions.AllowAny]  # 필요 시 인증으로 변경
+
+    def post(self, request, *args, **kwargs):
+        """
+        body 예시: {"token":"...", "title":"테스트", "body":"안녕하세요", "dry_run": true}
+        """
+        token = (request.data.get("token") or "").strip()
+        title = request.data.get("title") or "SENCITY 테스트"
+        body  = request.data.get("body") or "서버에서 보낸 테스트 알림"
+        dry   = bool(request.data.get("dry_run", False))
+        data  = request.data.get("data") or {}
+
+        if not token:
+            return Response({"detail": "token is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            resp = send_fcm_to_token(token=token, title=title, body=body, data=data, dry_run=dry)
+            return Response({"message_id": resp, "dry_run": dry})
+        except Exception as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+
+class FCMTestTopicView(APIView):
+    permission_classes = [permissions.AllowAny]
+
+    def post(self, request, *args, **kwargs):
+        """
+        body 예시: {"topic":"sencity-test", "title":"테스트", "body":"토픽 발송", "dry_run": true}
+        """
+        topic = (request.data.get("topic") or "").strip()
+        title = request.data.get("title") or "SENCITY 테스트(토픽)"
+        body  = (request.data.get("body") or "서버에서 보낸 테스트 알림(토픽)").strip()
+        dry   = bool(request.data.get("dry_run", False))
+        data  = request.data.get("data") or {}
+
+        if not topic:
+            return Response({"detail": "topic is required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            resp = send_fcm_to_topic(topic=topic, title=title, body=body, data=data, dry_run=dry)
+            return Response({"message_id": resp, "dry_run": dry})
+        except Exception as e:
+            return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)

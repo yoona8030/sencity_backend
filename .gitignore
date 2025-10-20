@@ -8,46 +8,51 @@ __pycache__/
 *.egg-info/
 *.log
 
-*.sqlite
-backup_*.sqlite
-*.sqlite3
-*.sqlite3-journal
-media/
-staticfiles/
-.env
-.env.*
-# !fixtures/*.sqlite
-# !fixtures/*.sqlite3
-
-# SQLite runtime artifacts (WAL/SHM 포함) + 로컬 버전표시 + 백업본
-.db_version
-db.sqlite3.bak.*
-*.sqlite-wal
-*.sqlite-shm
-*.sqlite3-wal
-*.sqlite3-shm
-*.db-wal
-*.db-shm
-
-# Release에서만 쓰는 로컬 파일(실수 커밋 방지)
-db_release.sqlite3
-db_release.sha256.txt
-
-# Virtualenv
+# Virtualenvs
 .venv/
 venv*/
 ENV/
+_check/            # 설치 재현용 가상환경
+
+# Secrets / Env
+.env
+.env.*
+!.env.example
+
+# SQLite & artifacts
+*.sqlite
+*.sqlite3
+*.sqlite3-journal
+*.sqlite-wal
+*.sqlite-shm
+*.db-wal
+*.db-shm
+db.sqlite3.bak.*
+backup_*.sqlite
+.db_version
+
+# Static/Media (collectstatic 및 업로드 산출물)
+media/
+staticfiles/
+
+# (선택) fixtures DB를 커밋하고 싶다면 아래 두 줄의 주석 해제
+# !fixtures/*.sqlite
+# !fixtures/*.sqlite3
+
+# Release-only local files
+db_release.sqlite3
+db_release.sha256.txt
 
 # IDE
 .vscode/
 .idea/
 
-# Node / build (혹시 있을 경우)
+# Node / build (모노레포 또는 RN앱 포함 시 유지)
 node_modules/
 dist/
 build/
 
-# Data / Artifacts
+# ML/Data artifacts
 PetImages*/
 dashboard/vision/
 *.h5
@@ -56,24 +61,38 @@ dashboard/vision/
 *.pt
 *.onnx
 *.ckpt
+
+# firebase
+/sencity_keys/
+*.firebase.json
+*-firebase.json
+
+# Archives
 *.zip
 *.tar
 *.tar.gz
 
-# CSV 샘플/시드
+# CSV 샘플/시드(원본 데이터는 제외)
 *sample.csv
 *seed.csv
 reports_raw.csv
+fixtures/reports_staging.csv
 
 # OS
 .DS_Store
 Thumbs.db
 
-# 학습/데이터셋은 깃 추적 제외
+# Datasets (커밋 제외)
 training/
 datasets/
-**/*.zip
-**/*.tar
-**/*.tar.gz
 
-fixtures/reports_staging.csv
+# Test/Type/QA caches & coverage
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Merge/backup leftovers
+*.bak
+*.orig

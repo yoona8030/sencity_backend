@@ -6,18 +6,25 @@ from .models import (
     Animal,
     SearchHistory,
     Location,
+    AppBanner,
     Report,
     Notification,
     Feedback,
-    Statistic, 
-    SavedPlace
+    Statistic,
+    SavedPlace,
+    DeviceToken
 )
+
+@admin.register(DeviceToken)
+class DeviceTokenAdmin(admin.ModelAdmin):
+    list_display = ("user", "platform", "token", "updated_at")
+    search_fields = ("token", "user__username", "user__email")
 
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
     list_display   = ('username', 'email', 'telphone', 'user_address', 'agree')
     search_fields  = ('username', 'email', 'telphone')
-    
+
 @admin.register(Animal)
 class AnimalAdmin(admin.ModelAdmin):
     list_display   = ('name_kor', 'name_eng')
@@ -39,6 +46,12 @@ class LocationAdmin(admin.ModelAdmin):
     def reports_count(self, obj):
         return obj.reports.count()
     reports_count.short_description = 'Reports Count'
+
+@admin.register(AppBanner)
+class AppBannerAdmin(admin.ModelAdmin):
+    list_display = ("id", "text", "is_active", "priority", "starts_at", "ends_at")
+    list_filter  = ("is_active",)
+    search_fields = ("text", "cta_url")
 
 @admin.register(Report)
 class ReportAdmin(admin.ModelAdmin):

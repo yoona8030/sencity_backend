@@ -94,7 +94,7 @@ def _predict_probs(img: Image.Image):
 # --- “고라니/노루”, “중대백로/왜가리”, “다람쥐/청설모”를 묶는 그룹 TopK ---
 GROUP_MAP = {
     # 사슴류: goat(고라니), roe deer(노루)
-    "goat": "goat",
+    "goat": "deer",
     "roe deer":   "deer",
 
     # 백로/왜가리 계열
@@ -102,15 +102,15 @@ GROUP_MAP = {
     "heron": "heron_egret",
 
     # 다람쥐과: squirrel(청설모), chipmunk(멧다람쥐)
-    "squirrel":  "sciuridae",
-    "chipmunk":  "sciuridae",
+    "squirrel":  "squirrel",
+    "chipmunk":  "squirrel",
 }
 
 # 그룹의 한글 표시(응답용)
 GROUP_DISPLAY_KO = {
     "deer":        "고라니/노루",
     "heron_egret": "왜가리/중대백로",
-    "sciuridae":   "다람쥐/청설모",
+    "squirrel":   "다람쥐/청설모",
 }
 
 def predict_topk_grouped(img: Image.Image, k: int = 3):

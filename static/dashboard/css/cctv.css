@@ -54,6 +54,13 @@
     background: #feba15;
 }
 
+.device-item.offline {
+    background: #f7f7f7;
+}
+
+
+/* 명시 */
+
 .device-left {
     display: flex;
     align-items: center;
@@ -182,4 +189,46 @@
     color: #666;
     font-size: 13px;
     text-align: center;
+}
+
+
+/* === 좌측 카드 클릭 UX 강화 (추가) === */
+
+.device-item,
+.sensor {
+    cursor: pointer;
+    transition: transform 0.06s ease, box-shadow 0.06s ease, outline-color 0.06s ease;
+}
+
+.device-item:hover,
+.sensor:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+
+/* 활성화(선택됨) 표시 */
+
+.device-item.active,
+.sensor.active {
+    outline: 2px solid #F6A800;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 2px rgba(246, 168, 0, 0.15) inset;
+}
+
+
+/* 키보드 포커스 접근성 */
+
+.device-item:focus-visible,
+.sensor:focus-visible {
+    outline: 3px solid #111;
+    outline-offset: 2px;
+}
+
+
+/* ONLINE 배경의 가독성 보정(선택) */
+
+.device-item.online .device-info .state {
+    color: rgba(0, 0, 0, 0.7);
+    font-weight: 700;
 }

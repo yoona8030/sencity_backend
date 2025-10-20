@@ -1,19 +1,18 @@
 from pathlib import Path
 from datetime import timedelta
+import os, environ, warnings
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+env = environ.Env()
+environ.Env.read_env(os.path.join(BASE_DIR, ".env"))
+
 MODEL_DIR = BASE_DIR / "sencity_classification_model" / "models"
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-c#-byo@@o4m0xv_xme#p(51cijvsdfx211e_=v3p5_$87hhy!p'
-
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-
-# ALLOWED_HOSTS = ['localhost', '127.0.0.1', '10.0.2.2', '0.0.0.0', '121.161.194.229', '172.30.1.68']
+SECRET_KEY = env('SECRET_KEY')
+DEBUG = env.bool('DEBUG', default=False)
 ALLOWED_HOSTS = ['*']
 # 업로드 허용 이미지 타입 (views에서 재사용)
 ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
+ALLOW_ANON_REPORTS = False
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -28,20 +27,22 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     'api',
+    'cctv',
     'inquiries',
+    "channels",
     'dashboard',
     'api.metrics.apps.MetricsConfig',
     'django_extensions',
 ]
 
 SIMPLE_JWT = {
-    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=30),
-    "REFRESH_TOKEN_LIFETIME": timedelta(days=7),
-    "ROTATE_REFRESH_TOKENS": True,  # 갱신 시 refresh 교체(보안↑)
+    "ACCESS_TOKEN_LIFETIME": timedelta(minutes=env.int('ACCESS_TOKEN_MIN', default=30)),
+    "REFRESH_TOKEN_LIFETIME": timedelta(days=env.int('REFRESH_TOKEN_DAYS', default=7)),
+    "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
     "AUTH_HEADER_TYPES": ("Bearer",),
     "UPDATE_LAST_LOGIN": True,
-    "LEEWAY": 30,  # (선택) 단말 시계 오차 허용 30초
+    "LEEWAY": 30,
 }
 
 MIDDLEWARE = [
@@ -49,7 +50,6 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
@@ -81,30 +81,62 @@ WSGI_APPLICATION = 'sencity_backend.wsgi.application'
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
-        'rest_framework.authentication.SessionAuthentication',
-        "rest_framework.authentication.BasicAuthentication",
-        "rest_framework.authentication.TokenAuthentication",
+        # 'rest_framework.authentication.SessionAuthentication',
+        # "rest_framework.authentication.BasicAuthentication",
+        # "rest_framework.authentication.TokenAuthentication",
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
-        'rest_framework.permissions.AllowAny',
     ],
-    "DEFAULT_RENDERER_CLASSES": [
-        "rest_framework.renderers.JSONRenderer",
-        'rest_framework.renderers.BrowsableAPIRenderer',
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',
+        # 개발 중 브라우저에서 API 확인 필요할 때만 주석 해제
+        # 'rest_framework.renderers.BrowsableAPIRenderer',
         'sencity_backend.utils.renderers.UTF8JSONRenderer',
 
     ],
     'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend'],
 }
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
-    }
-}
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.sqlite3',
+#     }
+# }
 
+# DB (sqlite 기본 / env로 덮어씀)
+if env('DB_ENGINE', default='sqlite3') == 'sqlite3':
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / env('DB_NAME', default='db.sqlite3'),
+            'OPTIONS': {'timeout': 10,}
+        }
+    }
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.' + env('DB_ENGINE'),
+            'NAME': env('DB_NAME'),
+            'USER': env('DB_USER'),
+            'PASSWORD': env('DB_PASSWORD'),
+            'HOST': env('DB_HOST', default='127.0.0.1'),
+            'PORT': env('DB_PORT', default='5432'),
+        }
+    }
+
+# AI/분류기 설정 (settings에서 참조 가능)
+DATASET_DIR = env('DATASET_DIR', default=None)
+VAL_RATIO   = env.float('VAL_RATIO', default=0.2)
+IMG_SIZE    = env.int('IMG_SIZE', default=224)
+BATCH       = env.int('BATCH', default=32)
+EPOCHS      = env.int('EPOCHS', default=5)
+
+CLASSIFIER_LOAD_FN = env('CLASSIFIER_LOAD_FN', default=None)
+CLASSIFIER_PRED_FN = env('CLASSIFIER_PRED_FN', default=None)
+CLASSIFIER_WEIGHTS = env('CLASSIFIER_WEIGHTS', default=None)
+CLASSIFIER_LABELS  = env('CLASSIFIER_LABELS', default=None)
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
@@ -159,10 +191,18 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# CORS
+CORS_ALLOW_ALL_ORIGINS = env.bool('CORS_ALLOW_ALL_ORIGINS', default=False)
+CORS_ALLOWED_ORIGINS = []
 
-CORS_ALLOW_CREDENTIALS = True
+# 로그인/로그아웃 경로 설정 (리다이렉트 포함)
+LOGIN_URL = '/accounts/login/'
+LOGIN_REDIRECT_URL = '/dashboard/'          # 로그인 성공 시 이동
+LOGOUT_REDIRECT_URL = '/accounts/login/'    # 로그아웃 시 이동
 
-CORS_ALLOWED_ORIGINS = [
-    'http://10.0.2.2:8000',
-    'http://192.168.0.15',
-]
+ASGI_APPLICATION = "sencity_backend.asgi.application"
+
+# 개발 단계: 메모리 채널 (운영은 Redis 권장)
+CHANNEL_LAYERS = {
+    "default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}
+}

@@ -149,6 +149,28 @@
     background: #fff;
     min-width: 200px;
     max-width: 100%;
+    font: inherit;
+    color: #111827;
+}
+
+
+/* textarea, datetime-local, number 보정 */
+
+.page-contents textarea.input,
+.page-contents textarea {
+    min-height: 96px;
+    padding: 10px 12px;
+    resize: vertical;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    font: inherit;
+}
+
+.page-contents input[type="datetime-local"].input,
+.page-contents input[type="number"].input,
+.page-contents input[type="url"].input {
+    height: 36px;
+    padding: 0 12px;
 }
 
 .page-contents .input.select,
@@ -168,6 +190,7 @@
     gap: 6px;
     cursor: pointer;
     font-weight: 600;
+    color: #111827;
 }
 
 .page-contents .btn.primary {
@@ -179,6 +202,15 @@
 .page-contents .btn.ghost {
     background: #fff;
     border-color: #e5e7eb;
+}
+
+
+/* 강조/경고 톤 버튼(배너 전송 등에 사용 가능) */
+
+.page-contents .btn.warn {
+    background: #fef3c7;
+    border-color: #fde68a;
+    color: #92400e;
 }
 
 
@@ -253,6 +285,16 @@
     border: 1px solid #e5e7eb;
 }
 
+
+/* 앱 배너 템플릿 강조 색상 */
+
+.page-contents .tmpl-card[data-template-id="app-banner"] .tmpl-icon {
+    background: #fff7ed;
+    /* 오렌지 살구빛 */
+    color: #9a3412;
+    border-color: #fed7aa;
+}
+
 .page-contents .tmpl-title {
     font-size: 18px;
     font-weight: 800;
@@ -279,6 +321,14 @@
     line-height: 1;
     background: #f3f4f6;
     color: #374151;
+}
+
+
+/* 작은 배지 변형 */
+
+.page-contents .badge.badge-sm {
+    padding: 3px 8px;
+    font-size: 11px;
 }
 
 .page-contents .tmpl-actions {
@@ -424,8 +474,8 @@
         gap: 8px;
     }
     /* 필요하면 아주 작은 화면에서 버튼 숨기기
-  .page-contents .templates-rail,
-  .page-contents .right-rail,
-  .page-contents .fab-rail { display: none; }
-  */
+    .page-contents .templates-rail,
+    .page-contents .right-rail,
+    .page-contents .fab-rail { display: none; }
+    */
 }
