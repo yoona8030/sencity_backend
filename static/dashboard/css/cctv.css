@@ -1,4 +1,4 @@
-/* 레이아웃 */
+/* ===== 레이아웃 ===== */
 
 .cctv-grid {
     display: grid;
@@ -9,11 +9,18 @@
 @media (max-width: 1100px) {
     .cctv-grid {
         grid-template-columns: 1fr;
+        /* 이미 있음 */
+    }
+    .left-col {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        /* 모바일에서 카드 간 여백 */
     }
 }
 
 
-/* 카드 공통 */
+/* ===== 카드 공통 ===== */
 
 .card {
     background: #fff;
@@ -30,7 +37,7 @@
 }
 
 
-/* 디바이스 리스트 */
+/* ===== 디바이스 리스트 ===== */
 
 .device-list {
     list-style: none;
@@ -44,7 +51,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px;
+    padding: 8px 10px;
     border: 1px solid #f0f0f0;
     border-radius: 12px;
     background: #f7f7f7;
@@ -59,7 +66,7 @@
 }
 
 
-/* 명시 */
+/* 표시 요소 */
 
 .device-left {
     display: flex;
@@ -91,7 +98,7 @@
 }
 
 
-/* 센서 */
+/* ===== 센서 ===== */
 
 .sensor-grid {
     display: grid;
@@ -100,7 +107,7 @@
 }
 
 .sensor {
-    padding: 14px 12px;
+    padding: 10px;
     border: 1px solid #f0f0f0;
     border-radius: 12px;
     background: #efefef;
@@ -122,7 +129,7 @@
 }
 
 
-/* 뷰어 */
+/* ===== 뷰어 ===== */
 
 .viewer-card {
     display: flex;
@@ -181,7 +188,6 @@
     object-fit: cover;
     border-radius: 12px;
     background: #000;
-    /* 로딩 시 배경 */
 }
 
 .viewer-foot {
@@ -192,7 +198,7 @@
 }
 
 
-/* === 좌측 카드 클릭 UX 강화 (추가) === */
+/* ===== 좌측 카드 클릭 UX 강화 ===== */
 
 .device-item,
 .sensor {
@@ -211,7 +217,7 @@
 
 .device-item.active,
 .sensor.active {
-    outline: 2px solid #F6A800;
+    outline: 2px solid #f6a800;
     outline-offset: 2px;
     box-shadow: 0 0 0 2px rgba(246, 168, 0, 0.15) inset;
 }
@@ -226,9 +232,127 @@
 }
 
 
-/* ONLINE 배경의 가독성 보정(선택) */
+/* ONLINE 배경의 가독성 보정 */
 
 .device-item.online .device-info .state {
     color: rgba(0, 0, 0, 0.7);
     font-weight: 700;
+}
+
+
+/* ===== 공통 버튼 ===== */
+
+.btn {
+    border: 0;
+    border-radius: 10px;
+    padding: 10px 16px;
+    cursor: pointer;
+    font-weight: 700;
+}
+
+.btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.btn-primary {
+    background: #0d6efd;
+    color: #fff;
+}
+
+.btn-secondary {
+    background: #f1f3f5;
+    color: #111;
+}
+
+.btn-danger {
+    background: #dc3545;
+    color: #fff;
+}
+
+
+/* ===== 신고 모달 ===== */
+
+.modal-dim {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: none;
+    z-index: 1000;
+}
+
+.modal {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 420px;
+    background: #fff;
+    border-radius: 14px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
+    display: none;
+    z-index: 1001;
+}
+
+.modal .hd {
+    padding: 16px 18px;
+    font-weight: 800;
+    border-bottom: 1px solid #eee;
+}
+
+.modal .bd {
+    padding: 14px 18px;
+    display: grid;
+    gap: 10px;
+}
+
+.modal .ft {
+    padding: 14px 18px;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    border-top: 1px solid #eee;
+}
+
+.modal label {
+    display: block;
+    margin: 4px 0 6px;
+    font-size: 13px;
+    color: #555;
+}
+
+.modal input,
+.modal select,
+.modal textarea {
+    width: 100%;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 14px;
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+@media (max-width: 460px) {
+    .modal {
+        width: calc(100% - 24px);
+    }
+    .form-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+.left-col .card+.card {
+    margin-top: 14px;
+    /* 두 카드(디바이스·센서) 사이 간격 */
+}
+
+.devices-card,
+.sensors-card {
+    padding: 12px;
+    /* 기존 16px보다 축소 */
 }

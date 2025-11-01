@@ -1,439 +1,568 @@
 {% load static %}
 <!DOCTYPE html>
 <html lang="ko">
-
-<head>
+  <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="csrf-token" content="{{ csrf_token }}" />
+    <meta name="api-jwt" content="{{ initial_jwt|default:'' }}" />
+
+    <!-- 토큰/푸시 유틸 -->
+    <script src="{% static 'dashboard/token.js' %}?v=2025-10-01-1"></script>
+    <script src="{% static 'dashboard/push.js' %}?v=2025-10-01-1"></script>
+    <script src="{% static 'dashboard/js/contents.js' %}?v=2025-10-01-1"></script>
+
     <title>관리자 페이지 | 공지 설정</title>
 
     <link rel="icon" href="{% static 'dashboard/images/favicon.ico' %}" sizes="any" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" />
     <link rel="stylesheet" href="{% static 'dashboard/css/dashboard.css' %}?v=fit-2025-09-19" />
-    <!-- ✅ 분리된 공지 전용 CSS -->
-    <link rel="stylesheet" href="{% static 'dashboard/css/notices.css' %}?v=2025-09-20-2" />
-    <script src="{% static 'dashboard/push.js' %}?v=2025-10-01-1"></script>
-</head>
+    <link rel="stylesheet" href="{% static 'dashboard/css/notices.css' %}?v=2025-10-25-paging-2" />
+  </head>
 
-<body class="page-notices">
+  <body class="page-notices">
     <div class="container">
-        <!-- 사이드바 -->
-        <aside class="sidebar">
-            <div class="sidebar-brand">관리자 페이지</div>
-            <div class="sidebar-logo">
-                <img src="{% static 'dashboard/images/logo.png' %}" alt="SENCITY" />
-                <span>SENCITY</span>
-            </div>
-            <a href="{% url 'admin:index' %}" class="sidebar-link">
-                <i class="fa-solid fa-arrow-up-right-from-square"></i> 사이트 바로가기
-            </a>
-            <hr />
-            <nav class="sidebar-menu">
-                <div class="menu-group">사이트 관리</div>
-                <a href="{% url 'dashboard:home' %}" class="menu-item"><i class="fa-solid fa-th-large"></i> 대시보드</a>
-                <a href="{% url 'dashboard:cctv' %}" class="menu-item"><i class="fa-solid fa-camera"></i> CCTV 관리</a>
-                <a href="{% url 'dashboard:reports' %}" class="menu-item"><i class="fa-solid fa-tv"></i> 신고 처리 및 관리</a>
-                <a href="{% url 'dashboard:settings' %}" class="menu-item"><i class="fa-solid fa-gear"></i> 설정</a>
-                <a href="{% url 'dashboard:users' %}" class="menu-item"><i class="fa-solid fa-user"></i> 사용자 관리</a>
+      <!-- 사이드바 -->
+      <aside class="sidebar">
+        <div class="sidebar-brand">관리자 페이지</div>
+        <div class="sidebar-logo">
+          <img src="{% static 'dashboard/images/logo.png' %}" alt="SENCITY" />
+          <span>SENCITY</span>
+        </div>
+        <a href="{% url 'admin:index' %}" class="sidebar-link">
+          <i class="fa-solid fa-arrow-up-right-from-square"></i>
+          사이트 바로가기
+        </a>
+        <hr />
+        <nav class="sidebar-menu">
+          <div class="menu-group">사이트 관리</div>
+          <a href="{% url 'dashboard:home' %}" class="menu-item">
+            <i class="fa-solid fa-th-large"></i>
+            대시보드
+          </a>
+          <a href="{% url 'dashboard:cctv' %}" class="menu-item">
+            <i class="fa-solid fa-camera"></i>
+            CCTV 관리
+          </a>
+          <a href="{% url 'dashboard:reports' %}" class="menu-item">
+            <i class="fa-solid fa-tv"></i>
+            신고 처리 및 관리
+          </a>
+          <a href="{% url 'dashboard:settings' %}" class="menu-item">
+            <i class="fa-solid fa-gear"></i>
+            설정
+          </a>
+          <a href="{% url 'dashboard:users' %}" class="menu-item">
+            <i class="fa-solid fa-user"></i>
+            사용자 관리
+          </a>
 
-                <div class="menu-group">콘텐츠 및 통계</div>
-                <a href="{% url 'dashboard:analytics' %}" class="menu-item"><i class="fa-solid fa-chart-column"></i> 데이터 분석 및 통계</a>
-                <a href="{% url 'dashboard:contents' %}" class="menu-item"><i class="fa-solid fa-file-lines"></i> 콘텐츠 관리</a>
-                <a href="{% url 'dashboard:notices' %}" class="menu-item active"><i class="fa-solid fa-bell"></i> 공지 설정</a>
-            </nav>
-        </aside>
+          <div class="menu-group">콘텐츠 및 통계</div>
+          <a href="{% url 'dashboard:analytics' %}" class="menu-item">
+            <i class="fa-solid fa-chart-column"></i>
+            데이터 분석 및 통계
+          </a>
+          <a href="{% url 'dashboard:contents' %}" class="menu-item">
+            <i class="fa-solid fa-file-lines"></i>
+            콘텐츠 관리
+          </a>
+          <a href="{% url 'dashboard:notices' %}" class="menu-item active">
+            <i class="fa-solid fa-bell"></i>
+            공지 설정
+          </a>
+        </nav>
+      </aside>
 
-        <!-- 본문 -->
-        <main class="main">
-            <div class="main-content">
-                <div class="dashboard-body wrap">
-                    <h1 class="page-title">공지 설정</h1>
+      <!-- 본문 -->
+      <main class="main">
+        <div class="main-content">
+          <div class="dashboard-body wrap">
+            <h1 class="page-title">공지 설정</h1>
 
-                    <section class="page-card">
-                        <!-- 툴바 -->
-                        <div class="section-header">
-                            <div class="section-actions-left">
-                                <button type="button" class="btn primary">＋ 새 공지</button>
+            <section class="page-card">
+              <!-- 툴바 -->
+              <div class="section-header">
+                <div class="section-actions-left">
+                  <button type="button" class="btn primary" id="btn-refresh">↻ 새로고침</button>
 
-                                <select id="scope" class="input select">
-                  <option value="">전체</option>
-                  <option value="global">그룹</option>
-                  <option value="personal">개인</option>
-                </select>
-                            </div>
-
-                            <div class="section-actions-right">
-                                <div class="search-wrap">
-                                    <input id="q" class="input" placeholder="유형/상태 변경 내용 검색" />
-                                    <button id="search" class="btn">검색</button>
-                                </div>
-
-                                <!-- ✅ 선택 공지 푸시 버튼 -->
-                                <button id="btn-push-open" class="btn danger" title="선택 공지를 푸시로 발송">
-                  <i class="fa-solid fa-paper-plane"></i> 선택 공지 푸시 전송
-                </button>
-                            </div>
-                        </div>
-
-                        <!-- 표 -->
-                        <div class="table-scroll">
-                            <table class="table" id="notice-table">
-                                <thead>
-                                    <tr>
-                                        <th style="width: 7ch">ID</th>
-                                        <th>제목</th>
-                                        <th style="width: 12ch">대상</th>
-                                        <th style="width: 14ch">유형</th>
-                                        <th style="width: 20ch">생성 시각</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tbody">
-                                    {% if notices %}{% for n in notices %}
-                                    <tr data-id="{{ n.id }}" data-type="{{ n.type|default:'' }}">
-                                        <td class="id-cell">{{ n.id }}</td>
-                                        <td class="title-cell" role="button" tabindex="0">{{ n.title_suggest|default:n.title }}</td>
-                                        <td>{{ n.scope }}</td>
-                                        <td>{{ n.type }}</td>
-                                        <td>{{ n.created_at }}</td>
-                                    </tr>
-                                    {% endfor %}{% else %}
-                                    <tr>
-                                        <td colspan="5" class="empty">표시할 공지가 없습니다</td>
-                                    </tr>
-                                    {% endif %}
-                                </tbody>
-                            </table>
-                        </div>
-                    </section>
+                  <select id="scope" class="input select" title="범위">
+                    <option value="">전체</option>
+                    <option value="global">그룹</option>
+                    <option value="personal">개인</option>
+                  </select>
                 </div>
-            </div>
-        </main>
+
+                <div class="section-actions-right">
+                  <div class="search-wrap">
+                    <input id="q" class="input" placeholder="제목/본문 검색(그룹 공지 위주)" />
+                    <button id="search" class="btn">검색</button>
+                  </div>
+
+                  <button id="btn-push-open" class="btn danger" title="선택 공지를 푸시로 발송">
+                    <i class="fa-solid fa-paper-plane"></i>
+                    선택 공지 푸시 전송
+                  </button>
+                </div>
+              </div>
+
+              <!-- 표 -->
+              <div class="table-scroll">
+                <table class="table" id="notice-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 7ch">ID</th>
+                      <th>제목</th>
+                      <th style="width: 12ch">대상</th>
+                      <th style="width: 14ch">유형</th>
+                      <th style="width: 20ch">생성 시각</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tbody">
+                    <!-- JS 로드 -->
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- ✅ 페이지네이션 -->
+              <div id="pagination" class="pagination"></div>
+            </section>
+          </div>
+        </div>
+      </main>
     </div>
 
-    <!-- ✅ 푸시 전송 모달 -->
-    <div id="pushModal" class="modal-backdrop" aria-hidden="true">
-        <div class="modal" role="dialog" aria-modal="true">
-            <div class="modal-header">선택 공지 푸시 전송</div>
-            <div class="modal-body">
-                <div>
-                    <label class="text-muted">제목</label>
-                    <input id="pm-title" class="input" maxlength="80" />
-                </div>
-                <div>
-                    <label class="text-muted">본문</label>
-                    <textarea id="pm-body" rows="6" class="input"></textarea>
-                    <div class="text-muted">※ 앱이 종료 상태여도 보이게 하려면 제목/본문이 있는 notification 전송이 필요합니다.</div>
-                </div>
-                <details>
-                    <summary>대상 옵션 (기본: 전체)</summary>
-                    <div style="display:grid; gap:6px; margin-top:6px;">
-                        <label class="text-muted">특정 사용자 ID 쉼표로 입력 (예: 12,34,56)</label>
-                        <input id="pm-userids" class="input" placeholder="비우면 전체 발송" />
-                    </div>
-                </details>
+    <!-- 푸시 전송 모달 -->
+    <div id="pushModal" class="modal" tabindex="-1" aria-labelledby="pushModalTitle" aria-hidden="true" hidden>
+      <div class="modal-dialog" role="document">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 id="pushModalTitle" class="modal-title">선택 공지 푸시 전송</h5>
+            <button type="button" class="btn close" id="pm-close" aria-label="닫기">×</button>
+          </div>
+
+          <div class="modal-body">
+            <div>
+              <label class="text-muted">제목</label>
+              <input id="pm-title" class="input" maxlength="80" />
             </div>
-            <div class="modal-footer">
-                <button id="pm-cancel" class="btn secondary">취소</button>
-                <button id="pm-send" class="btn danger"><i class="fa-solid fa-paper-plane"></i> 전송</button>
+            <div>
+              <label class="text-muted">본문</label>
+              <textarea id="pm-body" rows="6" class="input"></textarea>
+              <div class="text-muted">※ 앱이 종료 상태여도 보이게 하려면 제목/본문이 있는 notification 전송이 필요합니다.</div>
             </div>
+            <details>
+              <summary>대상 옵션 (기본: 전체)</summary>
+              <div style="display: grid; gap: 6px; margin-top: 6px">
+                <label class="text-muted">특정 사용자 ID 쉼표로 입력 (예: 12,34,56)</label>
+                <input id="pm-userids" class="input" placeholder="비우면 전체 발송" />
+              </div>
+            </details>
+          </div>
+
+          <div class="modal-footer">
+            <button id="pm-cancel" class="btn secondary" type="button">취소</button>
+            <button id="pm-send" class="btn danger" type="button">
+              <i class="fa-solid fa-paper-plane"></i>
+              전송
+            </button>
+          </div>
         </div>
+      </div>
     </div>
 
     <script>
-        // ====== 설정 ======
-        var API = '/dashboard/api/notices/';
-        var PUSH_API = '/api/push/broadcast/';
+      // ====== 상수/경로 ======
+      const API_BASE = '/api/notifications/'; // 목록/상세
+      const PUSH_GROUP_API = '/api/push/broadcast/'; // 공지 전송 API (끝 슬래시)
 
-        // ====== 엘리먼트 ======
-        var els = {
-            tbody: () => document.getElementById('tbody'),
-            scope: () => document.getElementById('scope'),
-            q: () => document.getElementById('q'),
-            btn: () => document.getElementById('search'),
-            btnPushOpen: () => document.getElementById('btn-push-open'),
-            modal: () => document.getElementById('pushModal'),
-            pmTitle: () => document.getElementById('pm-title'),
-            pmBody: () => document.getElementById('pm-body'),
-            pmUserIds: () => document.getElementById('pm-userids'),
-            pmCancel: () => document.getElementById('pm-cancel'),
-            pmSend: () => document.getElementById('pm-send'),
+      const PAGE_SIZE = 20;
+
+      // ====== 엘리먼트 ======
+      const els = {
+        tbody: () => document.getElementById('tbody'),
+        scope: () => document.getElementById('scope'),
+        q: () => document.getElementById('q'),
+        btnSearch: () => document.getElementById('search'),
+        btnRefresh: () => document.getElementById('btn-refresh'),
+        btnPushOpen: () => document.getElementById('btn-push-open'),
+        modal: () => document.getElementById('pushModal'),
+        pmTitle: () => document.getElementById('pm-title'),
+        pmBody: () => document.getElementById('pm-body'),
+        pmUserIds: () => document.getElementById('pm-userids'),
+        pmCancel: () => document.getElementById('pm-cancel'),
+        pmSend: () => document.getElementById('pm-send'),
+      };
+
+      // ====== 유틸 ======
+      function escapeHtml(s) {
+        s = String(s == null ? '' : s);
+        return s.replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+      }
+      function nl2br(s) {
+        return escapeHtml(s || '').replace(/\n/g, '<br>');
+      }
+
+      function detailRow(id, html) {
+        const tr = document.createElement('tr');
+        tr.className = 'detail-row';
+        tr.dataset.for = id;
+        tr.innerHTML = '<td class="detail-cell" colspan="5"><div class="detail-box">' + html + '</div></td>';
+        return tr;
+      }
+      function closeDetail(id) {
+        els
+          .tbody()
+          .querySelectorAll(`tr.detail-row[data-for="${id}"]`)
+          .forEach((n) => n.remove());
+      }
+      function clearSelected() {
+        els
+          .tbody()
+          .querySelectorAll('tr.selected')
+          .forEach((tr) => tr.classList.remove('selected'));
+      }
+      function selectRow(tr) {
+        clearSelected();
+        tr.classList.add('selected');
+      }
+
+      function scopeToType(scopeVal) {
+        // '' → group(기본), personal → individual
+        if (scopeVal === 'personal') return 'individual';
+        return 'group';
+      }
+      function ensureModalHidden() {
+        const m = els.modal();
+        if (!m) return;
+        m.setAttribute('hidden', ''); // HTML hidden 속성
+        m.setAttribute('aria-hidden', 'true');
+        m.style.display = 'none'; // 안전장치로 display: none
+      }
+      // ====== 상세 열기 ======
+      async function openDetail(id, afterTr) {
+        const opened = els.tbody().querySelector(`tr.detail-row[data-for="${id}"]`);
+        if (opened) {
+          closeDetail(id);
+          return;
+        }
+
+        const loading = detailRow(id, '<div class="detail-loading">불러오는 중…</div>');
+        afterTr.insertAdjacentElement('afterend', loading);
+
+        try {
+          const url = API_BASE + id + '/';
+          const r = await (window.AdminToken?.authFetch
+            ? window.AdminToken.authFetch(url, { method: 'GET' })
+            : fetch(url, { credentials: 'same-origin' }));
+          if (!r.ok) throw new Error('load failed');
+          const n = await r.json();
+          const content = String(n.message || n.reply || '').trim();
+          loading.querySelector('.detail-box').innerHTML = content ? nl2br(content) : '내용이 없습니다';
+
+          const cell = els.tbody().querySelector(`tr[data-id="${id}"] .title-cell`);
+          if (cell) cell.textContent = (n.title || '공지').trim();
+        } catch (e) {
+          loading.querySelector('.detail-box').innerHTML = '<div class="detail-error">불러오기에 실패했습니다.</div>';
+        }
+      }
+
+      // ====== 목록 로드 + 페이지네이션 ======
+      async function loadList(page = 1) {
+        const url = new URL(API_BASE, location.origin);
+
+        // 타입 필터
+        const sc = els.scope().value; // '', 'global', 'personal'
+        const type = scopeToType(sc);
+        url.searchParams.set('type', type);
+
+        // 페이지
+        url.searchParams.set('page', page);
+        url.searchParams.set('page_size', PAGE_SIZE);
+
+        // 검색어(클라이언트 필터)
+        const q = (els.q().value || '').trim();
+
+        els.tbody().innerHTML = '<tr><td colspan="5" class="empty">불러오는 중…</td></tr>';
+
+        try {
+          const r = await (window.AdminToken?.authFetch
+            ? window.AdminToken.authFetch(url.toString(), { method: 'GET' })
+            : fetch(url.toString(), { credentials: 'same-origin' }));
+          if (!r.ok) throw new Error('list failed');
+
+          const d = await r.json(); // DRF 기본: {count, next, previous, results: [...]}
+
+          const rows = (d.results || d || []).filter((n) => {
+            if (!q) return true;
+            const text = (n.title || '') + '\n' + (n.reply || n.message || '');
+            return text.toLowerCase().includes(q.toLowerCase());
+          });
+
+          let html = '';
+          rows.forEach((n) => {
+            const id = n.notification_id ?? n.id;
+            const targetLabel = n.type === 'group' ? '전체' : '개인';
+            const typeLabel = n.status_label || n.type || '';
+            const created = (n.created_at || '').toString();
+            const safeTitle = escapeHtml(n.title || '');
+
+            html += `
+              <tr data-id="${id}" data-type="${escapeHtml(n.type || '')}">
+                <td class="id-cell">${id}</td>
+                <td class="title-cell" role="button" tabindex="0">${safeTitle}</td>
+                <td>${targetLabel}</td>
+                <td>${escapeHtml(typeLabel)}</td>
+                <td>${escapeHtml(created)}</td>
+              </tr>`;
+          });
+
+          els.tbody().innerHTML = html || '<tr><td colspan="5" class="empty">표시할 공지가 없습니다</td></tr>';
+
+          // ✅ 페이지네이션
+          const total = Number(d.count ?? 0);
+          const totalPages = total > 0 ? Math.ceil(total / PAGE_SIZE) : 1;
+          renderPagination(page, totalPages);
+        } catch (e) {
+          console.error(e);
+          els.tbody().innerHTML = '<tr><td colspan="5" class="empty error">불러오기에 실패했습니다</td></tr>';
+          renderPagination(1, 1);
+        }
+      }
+
+      function renderPagination(page, totalPages) {
+        const pag = document.getElementById('pagination');
+        if (!pag) return;
+        pag.innerHTML = '';
+
+        if (totalPages <= 1) return;
+
+        const makeBtn = (num, text = String(num), active = false, disabled = false) => {
+          const b = document.createElement('button');
+          b.textContent = text;
+          b.type = 'button';
+          b.className = 'page-btn' + (active ? ' active' : '');
+          if (!disabled) {
+            b.addEventListener('click', () => loadList(num));
+          } else {
+            b.disabled = true;
+          }
+          return b;
         };
 
-        function escapeHtml(s) {
-            s = String(s == null ? '' : s);
-            return s.replace(/[&<>"']/g, m => ({
-                '&': '&amp;',
-                '<': '&lt;',
-                '>': '&gt;',
-                '"': '&quot;',
-                "'": '&#39;'
-            }[m]));
+        // 처음/이전
+        pag.appendChild(makeBtn(1, '«', false, page === 1));
+        pag.appendChild(makeBtn(Math.max(1, page - 1), '←', false, page === 1));
+
+        // 숫자 버튼 (최대 5개)
+        const start = Math.max(1, page - 2);
+        const end = Math.min(totalPages, page + 2);
+        for (let i = start; i <= end; i++) {
+          pag.appendChild(makeBtn(i, String(i), i === page));
         }
 
-        function nl2br(s) {
-            return escapeHtml(s || '').replace(/\n/g, '<br>');
+        // 다음/끝
+        pag.appendChild(makeBtn(Math.min(totalPages, page + 1), '→', false, page === totalPages));
+        pag.appendChild(makeBtn(totalPages, '»', false, page === totalPages));
+      }
+
+      // ====== 모달 ======
+      let _lastFocus = null;
+
+      function openPushModal(prefill) {
+        const modal = els.modal();
+
+        // ✅ 혹시 다른 컨테이너 안에 있으면 body로 이동해 viewport 기준 보장
+        if (modal.parentElement !== document.body) {
+          document.body.appendChild(modal);
         }
 
-        function detailRow(id, html) {
-            var tr = document.createElement('tr');
-            tr.className = 'detail-row';
-            tr.dataset.for = id;
-            tr.innerHTML = '<td class="detail-cell" colspan="5"><div class="detail-box">' + html + '</div></td>';
-            return tr;
-        }
+        els.pmTitle().value = prefill.title || '공지';
+        els.pmBody().value = (prefill.body || '').trim();
+        els.pmUserIds().value = '';
 
-        function closeDetail(id) {
-            var d = els.tbody().querySelector('tr.detail-row[data-for="' + id + '"]');
-            if (d) d.remove();
-        }
+        _lastFocus = document.activeElement;
 
-        function clearSelected() {
-            els.tbody().querySelectorAll('tr.selected').forEach(tr => tr.classList.remove('selected'));
-        }
+        // ✅ 스크롤 잠금
+        document.body.classList.add('no-scroll');
 
-        function selectRow(tr) {
-            clearSelected();
-            tr.classList.add('selected');
-        }
+        // 표시
+        modal.removeAttribute('hidden');
+        modal.setAttribute('aria-hidden', 'false');
 
-        async function openDetail(id, afterTr) {
-            var opened = els.tbody().querySelector('tr.detail-row[data-for="' + id + '"]');
-            if (opened) {
-                closeDetail(id);
-                return;
-            }
-            var loading = detailRow(id, '<div class="detail-loading">불러오는 중…</div>');
-            afterTr.insertAdjacentElement('afterend', loading);
+        // flex 중앙 정렬 유지
+        modal.style.display = 'flex';
 
-            try {
-                var url = new URL(API, location.origin);
-                url.searchParams.set('id', id);
-                var r = await fetch(url.toString(), {
-                    credentials: 'same-origin'
-                });
-                if (!r.ok) throw new Error('load failed');
-                var data = await r.json();
-                var n = data.notice || data || {};
-                var content = String(n.content || '').trim();
-                loading.querySelector('.detail-box').innerHTML = content ? nl2br(content) : '내용이 없습니다';
-
-                var row = els.tbody().querySelector('tr[data-id="' + id + '"]');
-                if (row) {
-                    var cell = row.querySelector('.title-cell');
-                    if (cell) {
-                        var t = String(n.title_suggest || n.title || '').trim();
-                        cell.textContent = t || '공지';
-                    }
-                }
-            } catch (e) {
-                loading.querySelector('.detail-box').innerHTML = '<div class="detail-error">불러오기에 실패했습니다.</div>';
-            }
-        }
-
-        async function loadList(page) {
-            page = page || 1;
-            var url = new URL(API, location.origin);
-            url.searchParams.set('page', page);
-            url.searchParams.set('page_size', 20);
-
-            var sc = els.scope().value;
-            var q = (els.q().value || '').trim();
-            if (sc === 'global') url.searchParams.set('scope', 'global');
-            else if (sc === 'personal') url.searchParams.set('scope', 'personal');
-            if (q) url.searchParams.set('q', q);
-
-            els.tbody().innerHTML = '<tr><td colspan="5" class="empty">불러오는 중…</td></tr>';
-            try {
-                var r = await fetch(url.toString(), {
-                    credentials: 'same-origin'
-                });
-                if (!r.ok) throw new Error('list failed');
-                var d = await r.json();
-                var html = '';
-                (d.results || []).forEach(function(n) {
-                    var safeTitle = escapeHtml(n.title_suggest || n.title || '');
-                    html += '<tr data-id="' + n.id + '" data-type="' + (n.type || '') + '">' +
-                        '<td class="id-cell">' + n.id + '</td>' +
-                        '<td class="title-cell" role="button" tabindex="0">' + safeTitle + '</td>' +
-                        '<td>' + escapeHtml(n.scope || '') + '</td>' +
-                        '<td>' + escapeHtml(n.type || '') + '</td>' +
-                        '<td>' + escapeHtml(n.created_at || '') + '</td>' +
-                        '</tr>';
-                });
-                els.tbody().innerHTML = html || '<tr><td colspan="5" class="empty">표시할 공지가 없습니다</td></tr>';
-            } catch (e) {
-                els.tbody().innerHTML = '<tr><td colspan="5" class="empty error">불러오기에 실패했습니다</td></tr>';
-            }
-        }
-
-        // 모달
-        function openPushModal(prefill) {
-            els.pmTitle().value = prefill.title || '공지';
-            els.pmBody().value = prefill.body || '';
-            els.pmUserIds().value = '';
-            els.modal().style.display = 'flex';
-            els.modal().setAttribute('aria-hidden', 'false');
-        }
-
-        function closePushModal() {
-            els.modal().style.display = 'none';
-            els.modal().setAttribute('aria-hidden', 'true');
-        }
-
-        async function sendBroadcastPushLocal(payload) {
-            if (window.sendBroadcastPush) return window.sendBroadcastPush(payload);
-
-            function getCookie(name) {
-                let v = null;
-                if (document.cookie && document.cookie !== '') {
-                    document.cookie.split(';').map(s => s.trim()).forEach(c => {
-                        if (c.startsWith(name + '=')) v = decodeURIComponent(c.slice(name.length + 1));
-                    });
-                }
-                return v;
-            }
-            const csrftoken = getCookie('csrftoken');
-            const res = await fetch(PUSH_API, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': csrftoken
-                },
-                credentials: 'same-origin',
-                body: JSON.stringify(payload)
-            });
-            if (!res.ok) throw new Error(`HTTP ${res.status}: ` + await res.text());
-            return res.json();
-        }
-
-        document.addEventListener('DOMContentLoaded', function() {
-            // 행 클릭: 선택 + 제목 셀은 상세 토글
-            els.tbody().addEventListener('click', function(e) {
-                var tr = e.target.closest('tr');
-                if (!tr) return;
-                selectRow(tr);
-
-                if (tr) {
-                    var id = tr.getAttribute('data-id');
-                    if (id) openDetail(id, tr);
-                }
-            });
-
-            // 키보드 접근성
-            els.tbody().addEventListener('keydown', function(e) {
-                var cell = e.target.closest('td.title-cell');
-                if (!cell) return;
-                if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    var tr = cell.closest('tr');
-                    if (!tr) return;
-                    selectRow(tr);
-                    var id = tr.getAttribute('data-id');
-                    if (id) openDetail(id, tr);
-                }
-            });
-
-            els.btn().addEventListener('click', function() {
-                loadList(1);
-            });
-            els.scope().addEventListener('change', function() {
-                loadList(1);
-            });
-
-            var timer = null;
-            els.q().addEventListener('input', function() {
-                clearTimeout(timer);
-                timer = setTimeout(function() {
-                    loadList(1);
-                }, 300);
-            });
-
-            // 푸시 열기
-            els.btnPushOpen().addEventListener('click', async function() {
-                var tr = els.tbody().querySelector('tr.selected');
-                if (!tr) {
-                    alert('푸시로 보낼 공지를 먼저 선택해 주세요. (행을 클릭)');
-                    return;
-                }
-                var id = tr.getAttribute('data-id');
-
-                // 제목/본문 프리필
-                var cellEl = tr.querySelector('.title-cell');
-                var title = (cellEl && cellEl.textContent ? cellEl.textContent.trim() : '') || '공지';
-                var body = '';
-
-                try {
-                    var url = new URL(API, window.location.origin);
-                    url.searchParams.set('id', id);
-                    var r = await fetch(url.toString(), {
-                        credentials: 'same-origin'
-                    });
-                    if (r.ok) {
-                        var d = await r.json();
-                        var n = d.notice || {};
-                        body = String(n.content || '').trim();
-                        var maybeTitle = String((n.title_suggest || n.title || '')).trim();
-                        if (maybeTitle) {
-                            title = maybeTitle;
-                        }
-                    }
-                } catch (e) { /* 무시하고 기본값 사용 */ }
-
-                openPushModal({
-                    title: title,
-                    body: body
-                });
-            });
-
-            // 모달 버튼
-            els.pmCancel().addEventListener('click', closePushModal);
-            els.pmSend().addEventListener('click', async function() {
-                var sel = els.tbody().querySelector('tr.selected');
-                if (!sel) {
-                    alert('푸시로 보낼 공지를 먼저 선택해 주세요.');
-                    return;
-                }
-                var title = String(els.pmTitle().value || '').trim();
-                var body = String(els.pmBody().value || '').trim();
-                var users = String(els.pmUserIds().value || '').trim();
-
-                var user_ids = null;
-                if (users) {
-                    var parts = users.split(',');
-                    user_ids = [];
-                    for (var i = 0; i < parts.length; i++) {
-                        var n = parseInt(parts[i].trim(), 10);
-                        if (!isNaN(n)) user_ids.push(n);
-                    }
-                    if (user_ids.length === 0) user_ids = null;
-                }
-
-                if (!title && !body) {
-                    alert('제목 또는 본문 중 하나는 필요합니다.');
-                    return;
-                }
-
-                try {
-                    var res = await sendBroadcastPushLocal({
-                        title: title,
-                        body: body,
-                        data: {
-                            kind: 'notice'
-                        },
-                        user_ids: user_ids
-                    });
-                    alert('푸시 전송 완료\nsuccess=' + res.success + ', failure=' + res.failure);
-                    closePushModal();
-                } catch (e) {
-                    console.error(e);
-                    alert('푸시 전송 실패: ' + e.message);
-                }
-            });
-
-            // SSR 유지 시 목록 자동 로드는 생략
-            // loadList(1);
+        // 첫 포커스
+        requestAnimationFrame(() => {
+          els.pmTitle().focus();
         });
-    </script>
-</body>
+      }
 
+      function closePushModal() {
+        const modal = els.modal();
+        modal.setAttribute('aria-hidden', 'true');
+        modal.style.display = 'none';
+        modal.setAttribute('hidden', '');
+
+        // ✅ 스크롤 잠금 해제
+        document.body.classList.remove('no-scroll');
+
+        // 트리거로 포커스 복귀
+        if (_lastFocus && typeof _lastFocus.focus === 'function') {
+          _lastFocus.focus();
+        } else {
+          els.btnPushOpen().focus();
+        }
+      }
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && els.modal().getAttribute('aria-hidden') === 'false') closePushModal();
+      });
+      els.modal().addEventListener('click', (e) => {
+        if (e.target === els.modal()) closePushModal();
+      });
+      document.getElementById('pm-close')?.addEventListener('click', closePushModal);
+
+      // 공지 전송(그룹/개인)
+      async function sendBroadcastPush(payload) {
+        if (window.AdminToken?.authFetch) {
+          const res = await window.AdminToken.authFetch(PUSH_GROUP_API, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}: ` + (await res.text()).slice(0, 300));
+          return res.json();
+        }
+        // 세션 + CSRF
+        function getCookie(name) {
+          let v = null;
+          (document.cookie || '')
+            .split(';')
+            .map((s) => s.trim())
+            .forEach((c) => {
+              if (c.startsWith(name + '=')) v = decodeURIComponent(c.slice(name.length + 1));
+            });
+          return v;
+        }
+        const csrftoken = getCookie('csrftoken');
+        const res = await fetch(PUSH_GROUP_API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+          credentials: 'same-origin',
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ` + (await res.text()).slice(0, 300));
+        return res.json();
+      }
+
+      // ====== 초기 바인딩 ======
+      document.addEventListener('DOMContentLoaded', function () {
+        ensureModalHidden();
+        // 표 행 클릭/키보드 열기
+        els.tbody().addEventListener('click', function (e) {
+          const tr = e.target.closest('tr');
+          if (!tr) return;
+          selectRow(tr);
+          const id = tr.getAttribute('data-id');
+          if (id) openDetail(id, tr);
+        });
+        els.tbody().addEventListener('keydown', function (e) {
+          const cell = e.target.closest('td.title-cell');
+          if (!cell) return;
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            const tr = cell.closest('tr');
+            if (!tr) return;
+            selectRow(tr);
+            const id = tr.getAttribute('data-id');
+            if (id) openDetail(id, tr);
+          }
+        });
+
+        // 검색/필터/새로고침
+        els.btnSearch().addEventListener('click', () => loadList(1));
+        els.btnRefresh().addEventListener('click', () => loadList(1));
+        els.scope().addEventListener('change', () => loadList(1));
+        let timer = null;
+        els.q().addEventListener('input', function () {
+          clearTimeout(timer);
+          timer = setTimeout(() => loadList(1), 300);
+        });
+
+        // 푸시 모달 열기
+        els.btnPushOpen().addEventListener('click', async function () {
+          const tr = els.tbody().querySelector('tr.selected');
+          if (!tr) {
+            alert('푸시로 보낼 공지를 먼저 선택해 주세요. (행을 클릭)');
+            return;
+          }
+          const id = tr.getAttribute('data-id');
+
+          // 프리필
+          let title = (tr.querySelector('.title-cell')?.textContent || '공지').trim();
+          let body = '';
+          try {
+            const url = API_BASE + id + '/';
+            const r = await (window.AdminToken?.authFetch
+              ? window.AdminToken.authFetch(url, { method: 'GET' })
+              : fetch(url, { credentials: 'same-origin' }));
+            if (r.ok) {
+              const n = await r.json();
+              title = (n.title || title).trim();
+              body = (n.reply || n.message || '').trim();
+            }
+          } catch (_) {}
+          openPushModal({ title, body });
+        });
+
+        // 모달 버튼
+        els.pmCancel().addEventListener('click', closePushModal);
+        els.pmSend().addEventListener('click', async function () {
+          const sel = els.tbody().querySelector('tr.selected');
+          if (!sel) {
+            alert('푸시로 보낼 공지를 먼저 선택해 주세요.');
+            return;
+          }
+
+          const title = String(els.pmTitle().value || '').trim();
+          const body = String(els.pmBody().value || '').trim();
+          const users = String(els.pmUserIds().value || '').trim();
+
+          // 최소 한 개는 필요(백엔드 검증과 일치)
+          if (!title && !body) {
+            alert('제목 또는 본문 중 하나는 필요합니다.');
+            return;
+          }
+
+          let user_ids = null;
+          if (users) {
+            user_ids = users
+              .split(',')
+              .map((x) => parseInt(x.trim(), 10))
+              .filter((n) => !isNaN(n));
+            if (user_ids.length === 0) user_ids = null;
+          }
+
+          try {
+            // 🔴 핵심: title/body 키로 보냄 + data.kind=notice (앱에서 분기용)
+            const res = await sendBroadcastPush({
+              title: title, // ✅
+              body: body, // ✅
+              data: { kind: 'notice' },
+              user_ids: user_ids || undefined, // 없으면 전체
+            });
+
+            alert('푸시 전송 완료\nsuccess=' + (res.success ?? 0) + ', failure=' + (res.failure ?? 0));
+            closePushModal();
+          } catch (e) {
+            console.error(e);
+            alert('푸시 전송 실패: ' + e.message);
+          }
+        });
+
+        // 첫 로드
+        loadList(1);
+      });
+    </script>
+  </body>
 </html>

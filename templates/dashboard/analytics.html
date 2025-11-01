@@ -591,7 +591,7 @@
                 LAYER_POINTS = L.layerGroup();
 
                 const animal = (document.getElementById('map-animal').value || '').trim();
-                let url = `/api/dashboard/report-points/?year=${encodeURIComponent(CURRENT_YEAR)}`;
+                let url = `/dashboard/api/report-points/?year=${encodeURIComponent(CURRENT_YEAR)}`;
                 if (animal) url += `&animal=${encodeURIComponent(animal)}`;
 
                 const res = await fetch(url, {

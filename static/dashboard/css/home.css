@@ -1,3 +1,19 @@
+/* ========== 전역 변수: 행/헤더 높이 ========== */
+
+:root {
+    --tbl-row-h: 36px;
+    /* 최근 신고: 1행 높이 */
+    --tbl-head-h: 42px;
+    /* thead 높이(패딩 포함) */
+    --card-pad: 16px;
+    /* 기본 카드 패딩 */
+    --card-pad-tight: 12px;
+    --gap: 16px;
+    --list-row-h: 44px;
+    /* 신고한 사용자 TOP: 1행 높이(패딩 포함) */
+}
+
+
 /* ========== 레이아웃 공통 ========== */
 
 .dash {
@@ -23,7 +39,6 @@
 /* 제목 아래 줄: 자막(좌) + 버튼(우) → Grid */
 
 .dash__meta {
-    /* 핵심: Grid 두 칸(자막 1fr | 버튼 auto) */
     display: grid;
     grid-template-columns: 1fr auto;
     align-items: end;
@@ -35,12 +50,8 @@
     margin: 0;
     color: #666;
     min-width: 0;
-    /* 긴 문장 줄바꿈/말줄임 대비 */
     overflow-wrap: anywhere;
 }
-
-
-/* 버튼 묶음: 기본 4열 한 줄, 우측 정렬 */
 
 .actions {
     display: grid;
@@ -48,7 +59,6 @@
     grid-template-columns: repeat(4, max-content);
     gap: 8px;
     justify-content: end;
-    /* 오른쪽 끝 정렬 */
     align-content: end;
 }
 
@@ -64,20 +74,15 @@
     font-weight: 600;
     color: #222;
     white-space: nowrap;
-    /* 버튼 내부 줄바꿈 방지 */
 }
 
 .btn:hover {
     background: #f7f7f7;
 }
 
-
-/* 화면이 줄면 버튼을 2×2(두 줄)로 전환 */
-
 @media (max-width: 1200px) {
     .actions {
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        /* 2열 */
         justify-content: stretch;
     }
     .actions .btn {
@@ -86,10 +91,10 @@
     }
 }
 
-
-/* 아주 좁아지면(모바일) 자막 위, 버튼 아래로 쌓기 */
-
 @media (max-width: 640px) {
+     :root {
+        --list-row-h: 36px;
+    }
     .dash__meta {
         grid-template-columns: 1fr;
         row-gap: 8px;
@@ -98,12 +103,13 @@
 }
 
 
-/* ========== 링크(중립) ========== */
+/* ========== 링크 ========== */
 
 .link {
     color: #333;
     text-decoration: none;
     font-weight: 600;
+    line-height: 1.4;
 }
 
 .link:hover {
@@ -135,12 +141,16 @@
     background: #fff;
     border: 1px solid #eee;
     border-radius: 18px;
-    padding: 16px;
+    padding: var(--card-pad);
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
 }
 
 .card+.card {
-    margin-top: 16px;
+    margin-top: var(--gap);
+}
+
+.card--tight {
+    padding: var(--card-pad-tight);
 }
 
 .card__head {
@@ -148,11 +158,23 @@
     align-items: center;
     justify-content: space-between;
     margin-bottom: 10px;
+    min-height: 32px;
 }
 
 .card__head h3 {
     margin: 0;
     font-size: 18px;
+    line-height: 1.3;
+    font-weight: 800;
+}
+
+
+/* 리스트 전용: 6행 딱 맞춤 */
+
+.card--list .list__wrap--fit6 {
+    max-height: calc(var(--list-row-h) * 6);
+    /* 정확히 6행 보이기 */
+    overflow-y: auto;
 }
 
 
@@ -160,31 +182,12 @@
 
 .grid {
     display: grid;
-    gap: 16px;
+    gap: var(--gap);
 }
-
-.grid--main {
-    grid-template-columns: 1.2fr 1fr;
-    margin-top: 16px;
-}
-
-.col {
-    display: grid;
-    gap: 16px;
-}
-
-@media (max-width: 1200px) {
-    .grid--main {
-        grid-template-columns: 1fr;
-    }
-}
-
-
-/* ========== KPI 영역 (Flex) ========== */
 
 .grid--kpi {
     display: flex;
-    gap: 16px;
+    gap: var(--gap);
     margin-top: 18px;
 }
 
@@ -198,6 +201,9 @@
 }
 
 @media (max-width: 900px) {
+     :root {
+        --list-row-h: 40px;
+    }
     .grid--kpi {
         flex-wrap: wrap;
     }
@@ -206,8 +212,26 @@
     }
 }
 
+.grid--main {
+    grid-template-columns: 1.2fr 1fr;
+    margin-top: var(--gap);
+    align-items: start;
+    /* ✅ 상단 정렬 고정 */
+}
 
-/* KPI 카드 내부 정렬 */
+.col {
+    display: grid;
+    gap: var(--gap);
+}
+
+@media (max-width: 1200px) {
+    .grid--main {
+        grid-template-columns: 1fr;
+    }
+}
+
+
+/* ========== KPI ========== */
 
 .kpi,
 .kpi * {
@@ -234,7 +258,6 @@
     flex: 1;
     display: flex;
     align-items: center;
-    justify-content: flex-start;
     line-height: 1;
     font-size: 30px;
     font-weight: 800;
@@ -256,16 +279,6 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-}
-
-.kpi__hint .link {
-    display: inline-block;
-    height: 22px;
-    line-height: 22px;
-}
-
-.kpi__hint .link:hover {
-    text-decoration: underline;
 }
 
 
@@ -348,6 +361,9 @@
 
 /* ========== TOP 사용자 ========== */
 
+
+/* 기본 리스트 구조 보강 (기존 선언과 중복되어도 안전) */
+
 .top-users__list {
     list-style: none;
     margin: 0;
@@ -356,17 +372,53 @@
     gap: 8px;
 }
 
+
+/* 각 행: 고정 높이 + 좌우 정렬 */
+
 .top-users__item {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 10px 12px;
+    height: var(--list-row-h);
+    /* ✅ 행 높이 고정 */
+    padding: 0 12px;
+    /* 세로 패딩 제거 → 높이 안정 */
     border: 1px solid #f0f0f0;
     border-radius: 12px;
+    gap: 8px;
 }
+
+
+/* 이름: 한 줄 고정 + … 말줄임 */
+
+.top-users__item .name {
+    min-width: 0;
+    /* flex 내부 말줄임 가능 조건 */
+    flex: 1 1 auto;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+
+/* 개수: 자릿수 안정 */
+
+.top-users__item .count {
+    flex: 0 0 auto;
+    font-variant-numeric: tabular-nums;
+}
+
+
+/* 빈 상태 표기 */
 
 .top-users__empty {
     color: #888;
+    height: var(--list-row-h);
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    border: 1px dashed #eee;
+    border-radius: 12px;
 }
 
 
@@ -377,22 +429,34 @@
 }
 
 .tbl {
+    table-layout: fixed;
     width: 100%;
-    border-collapse: collapse;
+    border-collapse: separate;
+    border-spacing: 0;
 }
+
+.tbl th,
+.tbl td {
+    vertical-align: middle;
+    padding: 8px 10px;
+}
+
+
+/* thead 스타일(높이 안정) */
 
 .tbl thead th {
     text-align: left;
-    padding: 12px;
     border-bottom: 1px solid #eee;
     color: #666;
-    font-weight: 700;
+    font-weight: 800;
+    height: var(--tbl-head-h);
 }
 
-.tbl tbody td {
-    padding: 12px;
-    border-bottom: 1px solid #f7f7f7;
-    vertical-align: top;
+
+/* 본문 행 높이 고정 */
+
+.tbl tbody tr {
+    height: var(--tbl-row-h);
 }
 
 .td-empty {
@@ -400,11 +464,39 @@
     text-align: center;
 }
 
-.td-ell {
-    max-width: 260px;
+
+/* 지역: 한 줄 + … */
+
+.tbl td.td-ell {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+
+/* 동물: 반드시 가로 한 줄 */
+
+.tbl td.td-animal {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+
+/* ========== “최근 신고 6행 딱 맞춤” 래퍼 ========== */
+
+.card--table .table__wrap--fit6 {
+    /* 카드 상하 패딩을 고려해도 정확히 6행만 보이게 */
+    max-height: calc(var(--tbl-head-h) + (var(--tbl-row-h) * 6) + 2px);
+    overflow-y: auto;
+}
+
+
+/* 카드와 헤더 정렬감을 위해 tighter 모드 */
+
+.card--table .tbl thead th,
+.card--table .tbl tbody td {
+    padding: 6px 10px;
 }
 
 

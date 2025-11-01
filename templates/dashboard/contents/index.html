@@ -1,0 +1,657 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- ✅ JWT(초기 주입; 없으면 빈 문자열) -->
+    <meta name="api-jwt" content="{{ admin_api_token|default:'' }}" />
+    <!-- ✅ CSRF -->
+    <meta name="csrf-token" content="{{ csrf_token }}" />
+
+    <title>관리자 페이지 | 콘텐츠 템플릿</title>
+
+    <!-- 공통 -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" />
+    <link rel="stylesheet" href="{% static 'dashboard/css/dashboard.css' %}?v=fit-2025-09-19" />
+
+    <!-- 이 페이지 전용 -->
+    <link rel="stylesheet" href="{% static 'dashboard/css/contents.css' %}?v=16" />
+    <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
+  </head>
+
+  <body class="page-contents">
+    <div class="container">
+      <!-- 사이드바 -->
+      <aside class="sidebar">
+        <div class="sidebar-brand">관리자 페이지</div>
+        <div class="sidebar-logo">
+          <img src="{% static 'dashboard/images/logo.png' %}" alt="SENCITY" />
+          <span>SENCITY</span>
+        </div>
+        <a href="{% url 'admin:index' %}" class="sidebar-link">
+          <i class="fa-solid fa-arrow-up-right-from-square"></i>
+          사이트 바로가기
+        </a>
+        <hr />
+        <nav class="sidebar-menu">
+          <div class="menu-group">사이트 관리</div>
+          <a href="{% url 'dashboard:home' %}" class="menu-item">
+            <i class="fa-solid fa-th-large"></i>
+            대시보드
+          </a>
+          <a href="{% url 'dashboard:cctv' %}" class="menu-item">
+            <i class="fa-solid fa-camera"></i>
+            CCTV 관리
+          </a>
+          <a href="{% url 'dashboard:reports' %}" class="menu-item">
+            <i class="fa-solid fa-tv"></i>
+            신고 처리 및 관리
+          </a>
+          <a href="{% url 'dashboard:settings' %}" class="menu-item">
+            <i class="fa-solid fa-gear"></i>
+            설정
+          </a>
+          <a href="{% url 'dashboard:users' %}" class="menu-item">
+            <i class="fa-solid fa-user"></i>
+            사용자 관리
+          </a>
+
+          <div class="menu-group">콘텐츠 및 통계</div>
+          <a href="{% url 'dashboard:analytics' %}" class="menu-item">
+            <i class="fa-solid fa-chart-column"></i>
+            데이터 분석 및 통계
+          </a>
+          <a href="{% url 'dashboard:content_index' %}" class="menu-item active">
+            <i class="fa-solid fa-file-lines"></i>
+            콘텐츠 템플릿
+          </a>
+          <a href="{% url 'dashboard:notices' %}" class="menu-item">
+            <i class="fa-solid fa-bell"></i>
+            공지 설정
+          </a>
+        </nav>
+      </aside>
+
+      <!-- 본문 -->
+      <main class="main-content" id="main">
+        <div class="dashboard-body wrap">
+          <!-- 타이틀 -->
+          <h1 class="page-title">콘텐츠 템플릿</h1>
+
+          <!-- 툴바 -->
+          <section class="card page-card">
+            <div class="section-header">
+              <!-- 좌측: 검색 -->
+              <div class="section-actions-left">
+                <input id="q" class="input" type="text" placeholder="제목/태그 검색" />
+                <button id="btn-search" class="btn">
+                  <i class="fa-solid fa-magnifying-glass"></i>
+                  검색
+                </button>
+              </div>
+
+              <!-- 우측: 액션 -->
+              <div class="section-actions-right">
+                <select id="templateSelect" class="input select">
+                  <option value="">템플릿 선택</option>
+                  <option value="new-card">신규 기능 카드</option>
+                  <option value="weekly">주간 통계 하이라이트</option>
+                  <option value="safety">안전 수칙 카드</option>
+                  <option value="event">이벤트 안내</option>
+                  <option value="app-banner">앱 배너 공지</option>
+                </select>
+                <button id="btn-add-template" class="btn ghost">
+                  <i class="fa-regular fa-square-plus"></i>
+                  템플릿 추가
+                </button>
+                <button id="btn-new" class="btn primary">
+                  <i class="fa-solid fa-plus"></i>
+                  새 콘텐츠
+                </button>
+              </div>
+            </div>
+
+            <!-- 섹션: 추천 템플릿 -->
+            <h2 class="sec-title">
+              <i class="fa-solid fa-wand-magic-sparkles"></i>
+              추천 템플릿
+            </h2>
+            <div class="template-grid">
+              <!-- 신규 기능 카드 -->
+              <article class="tmpl-card" data-template-id="new-card">
+                <div class="tmpl-head">
+                  <div class="tmpl-icon"><i class="fa-solid fa-star-of-life"></i></div>
+                  <div class="tmpl-title">신규 기능 카드</div>
+                </div>
+                <p class="tmpl-desc">썸네일 + 3줄 요약 + 자세히 보기. 릴리즈 안내/가이드에 적합.</p>
+                <div class="tmpl-meta">
+                  <span class="badge">홈</span>
+                  <span class="badge">대시보드</span>
+                  <span class="badge">CTA</span>
+                </div>
+                <div class="tmpl-actions">
+                  <button class="btn ghost" data-action="create">템플릿 생성</button>
+                  <button class="btn" data-action="preview">
+                    <i class="fa-regular fa-eye"></i>
+                    미리보기
+                  </button>
+                </div>
+              </article>
+
+              <!-- 주간 통계 하이라이트 -->
+              <article class="tmpl-card" data-template-id="weekly">
+                <div class="tmpl-head">
+                  <div class="tmpl-icon"><i class="fa-solid fa-chart-line"></i></div>
+                  <div class="tmpl-title">주간 통계 하이라이트</div>
+                </div>
+                <p class="tmpl-desc">핵심 지표 3개 + 차트 이미지 스냅샷 + 요약 포인트. 자동 갱신 가능한 대시보드 링크.</p>
+                <div class="tmpl-meta">
+                  <span class="badge">통계</span>
+                  <span class="badge">요약</span>
+                  <span class="badge">리포트</span>
+                </div>
+                <div class="tmpl-actions">
+                  <button class="btn ghost" data-action="create">템플릿 생성</button>
+                  <button class="btn" data-action="preview">
+                    <i class="fa-regular fa-eye"></i>
+                    미리보기
+                  </button>
+                </div>
+              </article>
+
+              <!-- 안전 수칙 카드 -->
+              <article class="tmpl-card" data-template-id="safety">
+                <div class="tmpl-head">
+                  <div class="tmpl-icon"><i class="fa-solid fa-shield-heart"></i></div>
+                  <div class="tmpl-title">안전 수칙 카드</div>
+                </div>
+                <p class="tmpl-desc">아이콘 + 한 줄 지침 + 자세히 보기. 야간 이동/분실물 등 접근성 ALT 카테고리 태그.</p>
+                <div class="tmpl-meta">
+                  <span class="badge">안전</span>
+                  <span class="badge">가이드</span>
+                </div>
+                <div class="tmpl-actions">
+                  <button class="btn ghost" data-action="create">템플릿 생성</button>
+                  <button class="btn" data-action="preview">
+                    <i class="fa-regular fa-eye"></i>
+                    미리보기
+                  </button>
+                </div>
+              </article>
+
+              <!-- 이벤트 안내 -->
+              <article class="tmpl-card" data-template-id="event">
+                <div class="tmpl-head">
+                  <div class="tmpl-icon"><i class="fa-solid fa-calendar-check"></i></div>
+                  <div class="tmpl-title">이벤트 안내</div>
+                </div>
+                <p class="tmpl-desc">일시/장소/신청 버튼. 설문·간담회·웨비나 공지에 활용. 예약 게시 외부 폼 연동.</p>
+                <div class="tmpl-meta">
+                  <span class="badge">이벤트</span>
+                  <span class="badge">폼 연동</span>
+                </div>
+                <div class="tmpl-actions">
+                  <button class="btn ghost" data-action="create">템플릿 생성</button>
+                  <button class="btn" data-action="preview">미리보기</button>
+                </div>
+              </article>
+
+              <!-- 앱 배너 공지 (신규) -->
+              <article class="tmpl-card" data-template-id="app-banner">
+                <div class="tmpl-head">
+                  <div class="tmpl-icon"><i class="fa-solid fa-bullhorn"></i></div>
+                  <div class="tmpl-title">앱 배너 공지</div>
+                </div>
+                <p class="tmpl-desc">앱 지도화면 하단 노란 배너 영역에 즉시 노출되는 공지를 생성합니다. (선택) CTA 링크 포함.</p>
+                <div class="tmpl-meta">
+                  <span class="badge">앱 배너</span>
+                  <span class="badge">공지</span>
+                  <span class="badge">즉시 노출</span>
+                </div>
+                <div class="tmpl-actions">
+                  <button class="btn ghost" data-action="banner">앱에 띄우기</button>
+                  <button class="btn" data-action="preview">미리보기</button>
+                </div>
+              </article>
+            </div>
+
+            <h2 style="font-weight: 700; font-size: 18px; margin: 0 0 10px">앱에 노출 중인 배너</h2>
+            <div
+              id="active-banners"
+              hx-get="{% url 'dashboard:content_banners_active' %}"
+              hx-trigger="load, recent:refresh from:body, banner:refresh from:body"
+              hx-target="#active-banners"
+              hx-swap="innerHTML">
+              <div class="skeleton">로딩 중...</div>
+            </div>
+
+            <!-- 섹션: 최근 생성 (예시) -->
+            <h2 class="sec-title">
+              <i class="fa-solid fa-clock-rotate-left"></i>
+              최근 생성
+            </h2>
+            <div
+              id="recent-mount"
+              hx-get="{% url 'dashboard:content_recent_partial' %}"
+              hx-trigger="load, recent:refresh from:body"
+              hx-swap="outerHTML">
+              <div class="recent-wrap">
+                <div class="recent-item">
+                  <span class="dot"></span>
+                  <div class="recent-text">
+                    <div class="title">불러오는 중…</div>
+                    <div class="meta">잠시만 기다려주세요</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <!-- 미리보기 모달 -->
+    <div
+      id="tmpl-modal-mask"
+      style="
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.45);
+        z-index: 9999;
+        align-items: center;
+        justify-content: center;
+      ">
+      <div
+        id="tmpl-modal"
+        style="
+          width: min(920px, 90vw);
+          max-height: 86vh;
+          background: #fff;
+          border-radius: 14px;
+          box-shadow: 0 10px 40px rgba(0, 0, 0, 0.18);
+          display: flex;
+          flex-direction: column;
+        ">
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid #eee">
+          <strong id="tmpl-modal-title" style="font-size: 16px">미리보기</strong>
+          <button
+            id="tmpl-modal-close"
+            style="height: 32px; padding: 0 10px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; cursor: pointer">
+            닫기
+          </button>
+        </div>
+        <div style="padding: 0; overflow: auto; flex: 1; min-height: 360px">
+          <iframe id="tmpl-modal-frame" src="" style="width: 100%; height: 65vh; border: 0; display: none"></iframe>
+          <img id="tmpl-modal-img" src="" alt="" style="max-width: 100%; display: none" />
+          <div id="tmpl-modal-body" style="padding: 16px; display: none"></div>
+        </div>
+        <div style="padding: 12px 16px; border-top: 1px solid #eee; display: flex; gap: 8px; justify-content: flex-end">
+          <button
+            id="tmpl-modal-use"
+            style="
+              height: 36px;
+              padding: 0 12px;
+              border: 1px solid #111827;
+              background: #111827;
+              color: #fff;
+              border-radius: 10px;
+              cursor: pointer;
+            ">
+            이 템플릿으로 만들기
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 앱 배너 생성 모달 (신규) -->
+    <div
+      id="banner-modal-mask"
+      style="
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.45);
+        z-index: 10000;
+        align-items: center;
+        justify-content: center;
+      ">
+      <div style="width: min(720px, 92vw); background: #fff; border-radius: 14px; box-shadow: 0 10px 40px rgba(0, 0, 0, 0.18)">
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #eee">
+          <strong style="font-size: 16px">앱 배너 공지 만들기</strong>
+          <button
+            id="banner-modal-close"
+            style="height: 32px; padding: 0 10px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; cursor: pointer">
+            닫기
+          </button>
+        </div>
+        <div style="padding: 16px; display: grid; gap: 12px">
+          <form
+            id="banner-form"
+            hx-post="{% url 'dashboard:content_create_app_banner' %}"
+            hx-trigger="submit"
+            hx-swap="none"
+            hx-on::after-request="
+                document.getElementById('banner-modal-mask').style.display='none';
+                htmx.trigger(document.body, 'recent:refresh');
+              ">
+            <label style="display: grid; gap: 6px">
+              <span>
+                텍스트
+                <span style="color: #d00">*</span>
+              </span>
+              <!-- ✅ 서버에서 title만 사용하므로 name='title' 로 전송 -->
+              <textarea
+                id="banner-text"
+                name="title"
+                rows="3"
+                class="input"
+                placeholder="앱 상단에 표시될 공지 문구를 입력하세요"
+                style="width: 100%"></textarea>
+            </label>
+
+            <!-- (선택) 서버에서 아직 안 쓰지만 추후 확장 대비해서 name만 부여 -->
+            <label style="display: grid; gap: 6px">
+              <span>CTA URL (선택)</span>
+              <input id="banner-cta" name="cta_url" type="url" class="input" placeholder="https:// 또는 앱 내 딥링크" />
+            </label>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
+              <label style="display: grid; gap: 6px">
+                <span>시작 시각 (기본: 지금)</span>
+                <input id="banner-starts" name="starts_at" type="datetime-local" class="input" />
+              </label>
+              <label style="display: grid; gap: 6px">
+                <span>종료 시각 (선택)</span>
+                <input id="banner-ends" name="ends_at" type="datetime-local" class="input" />
+              </label>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px">
+              <label style="display: grid; gap: 6px">
+                <span>우선순위</span>
+                <input id="banner-priority" name="priority" type="number" class="input" value="0" />
+              </label>
+              <label style="display: flex; align-items: center; gap: 10px; margin-top: 26px">
+                <input id="banner-active" name="is_active" type="checkbox" checked />
+                <span>활성화 (체크 시 바로 노출)</span>
+              </label>
+            </div>
+
+            <div style="padding-top: 12px; display: flex; gap: 8px; justify-content: flex-end">
+              <!-- ✅ type=submit 으로 변경 (HTMX 폼 제출) -->
+              <button type="submit" class="btn primary">생성 및 앱에 띄우기</button>
+            </div>
+          </form>
+          <!-- ✅ HTMX 폼 끝 -->
+        </div>
+      </div>
+    </div>
+
+    <!-- ✅ 토큰 헬퍼(있다면 사용) -->
+    <script defer src="{% static 'dashboard/js/tokenManager.js' %}?v=1"></script>
+
+    <!-- ✅ axios 전역 설정 (Authorization 주입 + 401 단발 재시도) -->
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script>
+      const api = axios.create({
+        baseURL: '', // 같은 도메인 사용
+        withCredentials: true,
+      });
+
+      function getCookie(name) {
+        const m = document.cookie.match(new RegExp('(?:^|; )' + name.replace(/([.$?*|{}()[]\\\/\+^])/g, '\\$1') + '=([^;]*)'));
+        return m ? decodeURIComponent(m[1]) : '';
+      }
+
+      async function getAccessToken() {
+        try {
+          if (window.TokenManager && typeof window.TokenManager.getValidAccessToken === 'function') {
+            return await window.TokenManager.getValidAccessToken();
+          }
+        } catch (_) {}
+        const meta = document.querySelector('meta[name="api-jwt"]');
+        return meta ? meta.content : '';
+      }
+
+      // 요청 인터셉터: CSRF + Authorization
+      api.interceptors.request.use(async (cfg) => {
+        const csrf = getCookie('csrftoken');
+        if (csrf) cfg.headers['X-CSRFToken'] = csrf;
+
+        if (!cfg.headers['Authorization']) {
+          const access = await getAccessToken();
+          if (access) cfg.headers['Authorization'] = 'Bearer ' + access;
+        }
+        return cfg;
+      });
+
+      // 응답 인터셉터: 401 → refresh-cookie(단일) → 1회 재시도
+      let refreshPromise = null;
+      api.interceptors.response.use(
+        (res) => res,
+        async (err) => {
+          const { config, response } = err || {};
+          if (!config || !response) return Promise.reject(err);
+
+          if (response.status === 401 && !config._retried) {
+            try {
+              if (!refreshPromise) {
+                refreshPromise = api.post('/api/token/refresh-cookie/').finally(() => {
+                  refreshPromise = null;
+                });
+              }
+              await refreshPromise;
+              config._retried = true;
+              return api.request(config);
+            } catch (e) {
+              alert('세션이 만료되었습니다. 다시 로그인해주세요.');
+              location.href = '/accounts/login/';
+              return Promise.reject(e);
+            }
+          }
+          return Promise.reject(err);
+        }
+      );
+    </script>
+
+    <!-- 동작 스크립트 -->
+    <script>
+      (function () {
+        // -------- 라우트(필요시 수정) --------
+        const URLS = {
+          newFromTemplate: (tid) => '/dashboard/contents/new/?template=' + encodeURIComponent(tid),
+          previewTemplate: (tid) => '/dashboard/contents/preview/' + encodeURIComponent(tid) + '/',
+          addTemplate: '/dashboard/contents/templates/new/',
+          newContent: '/dashboard/contents/new/',
+          apiCreate: '/dashboard/api/contents/create/',
+          apiBannerCreate: '/api/app-banners/', // DRF ViewSet
+        };
+
+        // -------- DOM --------
+        const grid = document.querySelector('.template-grid, .tmpl-grid, .cards-grid, .cards3');
+        const q = document.getElementById('q');
+        const btnSearch = document.getElementById('btn-search');
+        const btnNew = document.getElementById('btn-new');
+        const btnAddTmpl = document.getElementById('btn-add-template');
+        const sel = document.getElementById('templateSelect');
+
+        // 미리보기 모달
+        const $mask = document.getElementById('tmpl-modal-mask');
+        const $title = document.getElementById('tmpl-modal-title');
+        const $frame = document.getElementById('tmpl-modal-frame');
+        const $img = document.getElementById('tmpl-modal-img');
+        const $body = document.getElementById('tmpl-modal-body');
+        const $close = document.getElementById('tmpl-modal-close');
+        const $use = document.getElementById('tmpl-modal-use');
+        let currentTid = null;
+
+        // 배너 모달
+        const $bMask = document.getElementById('banner-modal-mask');
+        const $bClose = document.getElementById('banner-modal-close');
+        const $bText = document.getElementById('banner-text');
+        const $bCta = document.getElementById('banner-cta');
+        const $bStarts = document.getElementById('banner-starts');
+        const $bEnds = document.getElementById('banner-ends');
+        const $bPrio = document.getElementById('banner-priority');
+        const $bActive = document.getElementById('banner-active');
+        const $bSubmit = document.getElementById('banner-submit');
+
+        function openModal(opts) {
+          currentTid = opts.tid || null;
+          $title.textContent = opts.title || '미리보기';
+          if (opts.iframe) {
+            $frame.src = opts.iframe;
+            $frame.style.display = 'block';
+            $img.style.display = 'none';
+            $body.style.display = 'none';
+          } else if (opts.image) {
+            $img.src = opts.image;
+            $img.style.display = 'block';
+            $frame.style.display = 'none';
+            $body.style.display = 'none';
+          } else {
+            $body.innerHTML = opts.html || '<p>미리볼 내용이 없습니다.</p>';
+            $body.style.display = 'block';
+            $frame.style.display = 'none';
+            $img.style.display = 'none';
+          }
+          $mask.style.display = 'flex';
+          document.body.classList.add('modal-open');
+        }
+        function closeModal() {
+          $mask.style.display = 'none';
+          $frame.src = '';
+          currentTid = null;
+          document.body.classList.remove('modal-open');
+        }
+        $close.addEventListener('click', closeModal);
+        $mask.addEventListener('click', (e) => {
+          if (e.target === $mask) closeModal();
+        });
+        $use.addEventListener('click', function () {
+          if (!currentTid) return closeModal();
+          location.href = URLS.newFromTemplate(currentTid);
+        });
+
+        function openBannerModal() {
+          try {
+            const now = new Date();
+            const pad = (n) => String(n).padStart(2, '0');
+            const local = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(
+              now.getMinutes()
+            )}`;
+            $bStarts.value = local;
+          } catch {}
+          $bText.value = '';
+          $bCta.value = '';
+          $bEnds.value = '';
+          $bPrio.value = '0';
+          $bActive.checked = true;
+          $bMask.style.display = 'flex';
+          document.body.classList.add('modal-open');
+        }
+        function closeBannerModal() {
+          $bMask.style.display = 'none';
+          document.body.classList.remove('modal-open');
+        }
+        $bClose.addEventListener('click', closeBannerModal);
+        $bMask.addEventListener('click', (e) => {
+          if (e.target === $bMask) closeBannerModal();
+        });
+
+        // -------- 동작 --------
+        async function createFromTemplate(tid) {
+          try {
+            const res = await fetch(URLS.apiCreate, {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ template_id: tid }),
+            });
+            if (res.ok) {
+              const d = await res.json();
+              if (d && d.edit_url) {
+                location.href = d.edit_url;
+                return;
+              }
+            }
+          } catch (_) {}
+          location.href = URLS.newFromTemplate(tid);
+        }
+
+        function previewTemplate(tid, title) {
+          openModal({ tid, title: title || '미리보기', iframe: URLS.previewTemplate(tid) });
+        }
+
+        // 카드 클릭 위임
+        if (grid) {
+          grid.addEventListener('click', function (e) {
+            const btn = e.target.closest('button, a');
+            if (!btn) return;
+
+            let action = btn.getAttribute('data-action');
+            // ↓ 이 부분은 남겨도 되지만, 실제 data-action이 있으면 그대로 사용
+            if (!action) {
+              const label = (btn.textContent || '').trim();
+              if (/미리보기/.test(label)) action = 'preview';
+              else if (/생성|만들기/.test(label)) action = 'create';
+              else if (/앱에 띄우기/.test(label)) action = 'banner';
+            }
+
+            const card = btn.closest('[data-template-id]');
+            const tid = card && card.getAttribute('data-template-id');
+            const titleEl = card && (card.querySelector('.tmpl-title') || card.querySelector('h3, h4'));
+            const ttitle = titleEl ? (titleEl.textContent || '').trim() : '템플릿';
+
+            if (!tid || !action) return;
+
+            e.preventDefault();
+            if (action === 'create') createFromTemplate(tid);
+            if (action === 'preview') previewTemplate(tid, ttitle);
+            if (action === 'banner') openBannerModal();
+          });
+        }
+
+        // 상단 버튼
+        const qEl = q;
+        if (btnSearch)
+          btnSearch.addEventListener('click', function () {
+            const key = ((qEl && qEl.value) || '').trim();
+            if (!key) return;
+            location.href = '/dashboard/contents/?q=' + encodeURIComponent(key);
+          });
+        if (btnNew)
+          btnNew.addEventListener('click', function () {
+            const v = sel && sel.value ? '?template=' + encodeURIComponent(sel.value) : '';
+            location.href = URLS.newContent + v;
+          });
+        if (btnAddTmpl)
+          btnAddTmpl.addEventListener('click', function () {
+            location.href = URLS.addTemplate;
+          });
+
+        // 접근성: 카드 타이틀 클릭 → 미리보기
+        document.querySelectorAll('[data-template-id] .tmpl-title').forEach(function (el) {
+          el.style.cursor = 'pointer';
+          el.addEventListener('click', function () {
+            const card = el.closest('[data-template-id]');
+            const tid = card && card.getAttribute('data-template-id');
+            if (tid) previewTemplate(tid, (el.textContent || '').trim());
+          });
+        });
+      })();
+    </script>
+    <!-- ✅ HTMX 요청에도 CSRF 토큰 자동 주입 -->
+    <script>
+      document.addEventListener('htmx:configRequest', function (evt) {
+        try {
+          const meta = document.querySelector('meta[name="csrf-token"]');
+          const token = meta ? meta.content : '';
+          if (token) evt.detail.headers['X-CSRFToken'] = token;
+        } catch (_) {}
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,15 @@
+<!-- 최근 생성 섹션 -->
+<section class="mt-8">
+  <div class="flex items-center gap-2">
+    <span class="text-lg font-semibold">최근 생성</span>
+  </div>
+
+  <!-- 초기에는 로딩 문구만, 페이지 로드 시 파셜을 가져와 치환 -->
+  <div id="recent-mount"
+       hx-get="{% url 'dashboard:content_recent_partial' %}"
+       hx-trigger="load, recent:refresh from:body"
+       hx-target="#recent-mount"
+       hx-swap="outerHTML">
+    <div class="recent-item"><div class="recent-text">불러오는 중...</div></div>
+  </div>
+</section>

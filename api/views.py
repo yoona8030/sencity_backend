@@ -1,29 +1,32 @@
-import requests, ipaddress, socket, re
+import requests, ipaddress, socket, re, json
 from typing import Optional
-from urllib.parse import urlparse, urlencode
-from datetime import datetime, time, timedelta
+from urllib.parse import urlparse, urlencode, unquote, urljoin
+from datetime import datetime, time, timedelta, date
 from PIL import Image
+from django.apps import apps
 
 from django.contrib.auth import get_user_model, authenticate
-from django.contrib.auth.decorators import login_required
+from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.paginator import Paginator
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
+from django.utils.decorators import method_decorator
 from django.conf import settings
 from django.db.models import (
     Case, When, Value, CharField, F, Q, Count, Max, OuterRef, Subquery, DateTimeField
 )
+from django.views.decorators.http import require_http_methods
+from django.views.decorators.csrf import csrf_exempt
 from django.db.models.functions import ExtractYear
 from django.http import StreamingHttpResponse, JsonResponse, HttpResponse, HttpResponseBadRequest
 from django.views.decorators.http import require_GET
 from django.views.decorators.cache import cache_page
-from django.views.decorators.csrf import csrf_exempt
 
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import mixins, viewsets, status, permissions
+from rest_framework import mixins, viewsets, status, permissions, generics
 from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.decorators import action, api_view, permission_classes, authentication_classes
@@ -33,7 +36,8 @@ from rest_framework.views import APIView
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
-from rest_framework.authentication import SessionAuthentication
+from rest_framework.authentication import get_authorization_header
+
 try:
     from rest_framework_simplejwt.authentication import JWTAuthentication
     HAVE_JWT = True
@@ -48,6 +52,7 @@ from .models import (
     User, Animal, SearchHistory, Location, Report, Notification,
     Feedback, Admin, Statistic, SavedPlace, Profile, DeviceToken, AppBanner
 )
+from .pagination import DefaultPagination
 from .serializers import (
     UserSerializer, UserSignUpSerializer,
     AnimalSerializer, SearchHistorySerializer, SearchHistoryCreateSerializer,
@@ -62,6 +67,21 @@ from .serializers import (
 from .filters import ReportFilter, NotificationFilter
 
 User = get_user_model()
+
+# 공통: 관리자/스태프만 허용(필요 없으면 is_authenticated만 체크로 바꾸세요)
+def _is_staff(u):
+    return u.is_authenticated and (u.is_staff or u.is_superuser)
+
+def _build_image_url(request, report: Report):
+    # image 필드/경로 이름이 다르면 맞게 바꾸세요(예: report.photo, report.image 등)
+    img = getattr(report, 'image', None) or getattr(report, 'photo', None)
+    if not img:
+        return ''
+    try:
+        url = img.url
+    except Exception:
+        return ''
+    return request.build_absolute_uri(url)
 
 # ─────────────────────────────────────────────────────────────
 # 공용 헬퍼: 동물 표시용 이름 필드 선택(name_kor -> name)
@@ -232,90 +252,98 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [IsAdminUser]
 
 # ─────────────────────────────────────────────────────────────
-# Image Proxy (SSRF 보호)
+# Image Proxy (SSRF 보호) - 개선본
 # ─────────────────────────────────────────────────────────────
 ALLOWED_SCHEMES = {"http", "https"}
-ALLOWED_HOSTS_FOR_PROXY = {
-    'i.namu.wiki',
-    'encrypted-tbn0.gstatic.com',
-    'encrypted-tbn1.gstatic.com',
-    'encrypted-tbn2.gstatic.com',
-    'encrypted-tbn3.gstatic.com',
+
+# 도메인 전체가 아니라 "접미사"로 관리 → 모든 서브도메인 허용
+ALLOWED_HOST_SUFFIXES = {
+    "chosun.com",          # *.chosun.com (resizer, www 등)
+    "gstatic.com",         # encrypted-tbn*.gstatic.com
+    "namu.wiki",
+    # 필요시 추가: "daumcdn.net", "naver.net", ...
 }
+
 REQUEST_TIMEOUT = 8  # seconds
+
+def _host_allowed(host: str) -> bool:
+    host = (host or "").lower()
+    return any(host == suf or host.endswith("." + suf) for suf in ALLOWED_HOST_SUFFIXES)
 
 def _is_private_host(hostname: str) -> bool:
     try:
-        ip = socket.gethostbyname(hostname)
-        ip_obj = ipaddress.ip_address(ip)
-        return (
-            ip_obj.is_private
-            or ip_obj.is_loopback
-            or ip_obj.is_link_local
-            or ip_obj.is_reserved
-            or ip_obj.is_multicast
-        )
+        # IPv4/IPv6 전체 확인
+        for info in socket.getaddrinfo(hostname, None):
+            ip = info[4][0]
+            ip_obj = ipaddress.ip_address(ip)
+            if (ip_obj.is_private or ip_obj.is_loopback or ip_obj.is_link_local
+                    or ip_obj.is_reserved or ip_obj.is_multicast):
+                return True
+        return False
     except Exception:
         return True
-
 
 @require_GET
 @cache_page(60 * 60)
 def proxy_image_view(request):
-    url = (request.GET.get("url") or "").strip()
-    if not url:
+    raw = (request.GET.get("url") or "").strip()
+    if not raw:
         return HttpResponseBadRequest("missing url")
 
+    # 일부 클라이언트가 인코딩해 보내므로 디코드 후 파싱
+    url = unquote(raw)
     try:
         p = urlparse(url)
         if p.scheme not in ALLOWED_SCHEMES or not p.hostname:
             return HttpResponseBadRequest("invalid url")
 
-        # 1) 허용 호스트 검사
-        if p.hostname not in ALLOWED_HOSTS_FOR_PROXY:
+        if not _host_allowed(p.hostname):
             return HttpResponseBadRequest("host not allowed")
 
-        # 2) 사설망/루프백 차단
         if _is_private_host(p.hostname):
             return HttpResponseBadRequest("private host")
 
-        # 3) 포트 제한(이미지 CDN 기본 포트만 허용)
         if p.port not in (None, 80, 443):
             return HttpResponseBadRequest("port not allowed")
     except Exception:
         return HttpResponseBadRequest("bad url")
 
     headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-        ),
+        "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                       "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"),
         "Accept": "image/avif,image/webp,image/*,*/*;q=0.8",
         "Referer": f"{p.scheme}://{p.hostname}/",
     }
 
     try:
-        # 4) 리다이렉트 금지, 헤더만 먼저 확인해 사이즈 제한
-        r_head = requests.head(url, headers=headers, timeout=REQUEST_TIMEOUT, allow_redirects=False)
-        if r_head.is_redirect or r_head.status_code in (301, 302, 303, 307, 308):
-            return HttpResponseBadRequest("redirect not allowed")
+        # 1) HEAD 시도 (일부 CDN은 차단) → 실패/허용 안 될 때 GET으로 폴백
+        r_head = requests.head(url, headers=headers, timeout=REQUEST_TIMEOUT, allow_redirects=True)
+        final_url = r_head.url if getattr(r_head, "url", None) else url
+        pf = urlparse(final_url)
 
+        # 리다이렉트된 경우도 최종 호스트가 허용 목록이어야만 통과
+        if not _host_allowed(pf.hostname or "") or _is_private_host(pf.hostname or ""):
+            return HttpResponseBadRequest("redirected to disallowed host")
+
+        # 용량 체크(가능할 때만)
         cl = r_head.headers.get("Content-Length")
-        if cl and cl.isdigit() and int(cl) > 5_000_000:  # 5MB 제한 예시
+        if cl and cl.isdigit() and int(cl) > 5_000_000:
             return HttpResponseBadRequest("file too large")
 
-        r = requests.get(url, headers=headers, stream=True, timeout=REQUEST_TIMEOUT, allow_redirects=False)
+        # 2) 본문 GET
+        r = requests.get(final_url, headers=headers, stream=True,
+                         timeout=REQUEST_TIMEOUT, allow_redirects=True)
     except Exception:
         return HttpResponseBadRequest("upstream fetch error")
 
     if not r.ok:
         return HttpResponse(f"upstream status {r.status_code}", status=r.status_code)
 
-    content_type = r.headers.get("Content-Type", "")
-    if not content_type.startswith("image/"):
+    ct = r.headers.get("Content-Type", "")
+    if not ct.startswith("image/"):
         return HttpResponseBadRequest("not an image")
 
-    resp = StreamingHttpResponse(r.iter_content(chunk_size=8192), content_type=content_type)
+    resp = StreamingHttpResponse(r.iter_content(chunk_size=8192), content_type=ct)
     cl = r.headers.get("Content-Length")
     if cl and cl.isdigit():
         resp["Content-Length"] = cl
@@ -331,6 +359,28 @@ def _abs_media_url(request, f) -> str:
         return request.build_absolute_uri(url)
     except Exception:
         return ""
+
+MAX_REDIRECTS = 2
+
+def _safe_get(url, headers, timeout, allow_redirects=False, original_host=None):
+    """동일 호스트로의 짧은 리다이렉트만 허용"""
+    if not allow_redirects:
+        return requests.get(url, headers=headers, stream=True, timeout=timeout, allow_redirects=False)
+
+    hops = 0
+    cur = url
+    while hops < MAX_REDIRECTS:
+        r = requests.get(cur, headers=headers, stream=True, timeout=timeout, allow_redirects=False)
+        if r.is_redirect and r.headers.get("Location"):
+            nxt = urljoin(cur, r.headers["Location"])
+            p = urlparse(nxt)
+            if p.hostname != original_host:   # 다른 호스트로 튀면 차단
+                return r  # 리다이렉트로 응답(4xx처럼 취급)
+            cur = nxt
+            hops += 1
+            continue
+        return r
+    return r  # 최대 홉 도달 시 반환
 
 # ─────────────────────────────────────────────────────────────
 # Domain APIs
@@ -519,6 +569,7 @@ class AppBannerViewSet(viewsets.ModelViewSet):
 
 # 활성 배너 조회(앱에서 사용, 인증 불필요)
 class AppBannerActiveList(APIView):
+    authentication_classes = []                      # 인증 완전 비활성화
     permission_classes = [permissions.AllowAny]
 
     def get(self, request):
@@ -528,12 +579,8 @@ class AppBannerActiveList(APIView):
               .filter(Q(starts_at__isnull=True) | Q(starts_at__lte=now))
               .filter(Q(ends_at__isnull=True) | Q(ends_at__gte=now))
               .order_by('-priority', '-id'))
-
-        # (선택) 최근 1개만
         top = qs.first()
-        if not top:
-            return Response({"data": None})
-        return Response({"data": AppBannerReadSerializer(top).data})
+        return Response({"data": AppBannerReadSerializer(top).data if top else None})
 
 class ReportViewSet(mixins.ListModelMixin,
                     mixins.CreateModelMixin,
@@ -799,6 +846,76 @@ class ReportViewSet(mixins.ListModelMixin,
             data.append({"city": "기타", "animal": animal, "count": cnt})
 
         return Response(data)
+
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="my-points",
+        permission_classes=[IsAuthenticated],   # JWT로 인증 필요
+    )
+    def my_points(self, request):
+        """
+        GET /api/reports/my-points/
+        내 신고 중 좌표가 있는 것만 포인트로 반환
+        응답: {"points":[{id, lat, lng, animal, status, date, address}]}
+        """
+        # 내 신고만
+        qs = (Report.objects
+              .filter(user=request.user)
+              .select_related("location", "animal"))
+
+        items = []
+        for r in qs:
+            # 좌표 얻기: 위치 FK가 있으면 거기서, 아니면 Report 자체의 lat/lng 사용(있다면)
+            lat = None
+            lng = None
+            addr = ""
+
+            if getattr(r, "location", None):
+                loc = r.location
+                lat = getattr(loc, "latitude", None) or getattr(loc, "lat", None)
+                lng = getattr(loc, "longitude", None) or getattr(loc, "lng", None)
+                # 주소/지역 후보 중 있는 값 하나 고르기
+                for f in ("address", "region", "district", "city", "name", "detail", "road_address"):
+                    v = getattr(loc, f, None)
+                    if v:
+                        addr = v
+                        break
+            else:
+                # 위치 FK가 없다면 모델에 lat/lng가 직접 있는 경우 지원
+                lat = getattr(r, "latitude", None)
+                lng = getattr(r, "longitude", None)
+                for f in ("address", "report_region", "region"):
+                    v = getattr(r, f, None)
+                    if v:
+                        addr = v
+                        break
+
+            if lat is None or lng is None:
+                continue  # 좌표 없으면 스킵
+
+            # 동물명(별칭 안전 처리)
+            animal = None
+            if getattr(r, "animal", None):
+                animal = getattr(r.animal, "name_kor", None) or getattr(r.animal, "name", None)
+            if not animal:
+                animal = getattr(r, "animal_name", None) or "미상"
+
+            # 날짜(Report에 따라 Date/DateTime)
+            dt = getattr(r, "report_date", None) or getattr(r, "created_at", None)
+            date_iso = dt.isoformat() if dt else None
+
+            items.append({
+                "id": r.id,
+                "lat": float(lat),
+                "lng": float(lng),
+                "animal": animal,
+                "status": getattr(r, "status", "") or "",
+                "date": date_iso,
+                "address": addr or "",
+            })
+
+        return Response({"points": items})
 
     # ===== 홈 카드용 요약 =====
     @action(detail=False, methods=['get'], url_path='summary')
@@ -1126,6 +1243,165 @@ class ReportNoAuthView(APIView):
             'created_at': rpt.report_date,
         }, status=201)
 
+def _report_to_dict(request, rpt: Report):
+    """
+    대시보드 리스트용 표시 데이터 생성:
+    - 동물명: Animal.name_kor → name → name_eng → Report.animal_name/label → '미상'
+    - 신고자: user.username → user.email → ''
+    - 지역: Location.address → region → district → city → name → detail → road_address
+           (없으면 Report.report_region → region → address)
+    - 일시: report_date(또는 created_at/created/date) → 'YYYY-MM-DD HH:MM'
+    - created_at 키를 유지(프론트 호환). 필요 시 report_date 문자열도 함께 반환.
+    """
+    # 1) 동물명
+    animal_name = ""
+    a = getattr(rpt, "animal", None)
+    if a:
+        for f in ("name_kor", "name", "name_eng", "label", "species"):
+            v = getattr(a, f, None)
+            if isinstance(v, str) and v.strip():
+                animal_name = v.strip()
+                break
+    if not animal_name:
+        for f in ("animal_name", "animal_label", "animal"):
+            v = getattr(rpt, f, None)
+            if isinstance(v, str) and v.strip():
+                animal_name = v.strip()
+                break
+    if not animal_name:
+        animal_name = "미상"
+
+    # 2) 신고자
+    reporter_name = ""
+    u = getattr(rpt, "user", None)
+    if u:
+        for f in ("username", "email", "nickname"):
+            v = getattr(u, f, None)
+            if isinstance(v, str) and v.strip():
+                reporter_name = v.strip()
+                break
+
+    # 3) 지역
+    region = ""
+    loc = getattr(rpt, "location", None)
+    if loc:
+        for f in ("address", "region", "district", "city", "name", "detail", "road_address"):
+            v = getattr(loc, f, None)
+            if isinstance(v, str) and v.strip():
+                region = v.strip()
+                break
+    if not region:
+        for f in ("report_region", "region", "address"):
+            v = getattr(rpt, f, None)
+            if isinstance(v, str) and v.strip():
+                region = v.strip()
+                break
+
+    # 4) 일시(문자열)
+    dt = (
+        getattr(rpt, "report_date", None)
+        or getattr(rpt, "created_at", None)
+        or getattr(rpt, "created", None)
+        or getattr(rpt, "date", None)
+    )
+    created_str = ""
+    if dt:
+        try:
+            # DateTime → 로컬타임 변환 후 포맷 / Date → 자정 시각으로 포맷
+            if isinstance(dt, datetime):
+                created_str = timezone.localtime(dt).strftime("%Y-%m-%d %H:%M")
+            elif isinstance(dt, date):
+                created_str = datetime(dt.year, dt.month, dt.day).strftime("%Y-%m-%d 00:00")
+            else:
+                created_str = str(dt)
+        except Exception:
+            created_str = str(dt)
+
+    return {
+        "id": rpt.id,
+        "animal": animal_name,
+        "reporter": reporter_name or "",
+        "region": region or "",
+        "status": getattr(rpt, "status", "") or "",
+        # ✅ 프론트 호환을 위해 created_at 키 유지
+        "created_at": created_str,
+        # 선택: 필요하면 프론트 마이그레이션 중에 참고하도록 동일 값 제공
+        "report_date": created_str,
+        "image_url": _build_image_url(request, rpt),
+    }
+
+@login_required
+@user_passes_test(_is_staff)
+def dashboard_reports(request):
+    """
+    GET /api/dashboard/reports/?page=1&page_size=20&q=키워드
+    - 결과: { page, total_pages, results:[{id,animal,reporter,region,status,created_at,image_url}] }
+    - 세션 로그인(스태프) 필요
+    """
+    page = int(request.GET.get('page') or 1)
+    page_size = int(request.GET.get('page_size') or 20)
+    status_q = (request.GET.get('status') or '').strip()
+
+    qs = Report.objects.select_related('animal', 'user', 'location').all().order_by('-id')
+
+    if status_q:
+        qs = qs.filter(status=status_q)
+
+    paginator = Paginator(qs, page_size)
+    page_obj = paginator.get_page(page)
+
+    data = {
+        "page": page_obj.number,
+        "total_pages": paginator.num_pages,
+        "results": [_report_to_dict(request, rpt) for rpt in page_obj.object_list],
+    }
+    return JsonResponse(data, status=200)
+
+@login_required
+@user_passes_test(_is_staff)
+def dashboard_report_stats(request):
+    """
+    GET /api/dashboard/report-stats/
+    - 총 신고 수, 오늘 접수, 미해결
+    """
+    total = Report.objects.count()
+    today = Report.objects.filter(
+        # created_at/created/ date 필드명에 맞춰 수정
+        report_date=timezone.localdate()
+    ).count() if hasattr(Report, 'report_date') else 0
+
+    unresolved = Report.objects.exclude(status='completed').count()
+    return JsonResponse({
+        "total": total,
+        "today": today,
+        "unresolved": unresolved,
+    }, status=200)
+
+@login_required
+@user_passes_test(_is_staff)
+def dashboard_reporters(request):
+    """
+    GET /api/dashboard/reporters/?limit=10
+    - 신고 상위 사용자 Top N
+    - 결과: { results:[{ name, count }] }
+    """
+    try:
+        limit = int(request.GET.get('limit') or 10)
+    except Exception:
+        limit = 10
+
+    qs = (Report.objects
+          .values('user__username', 'user__email')
+          .annotate(count=Count('id'))
+          .order_by('-count')[:limit])
+
+    results = []
+    for row in qs:
+        name = row.get('user__username') or row.get('user__email') or '(알수없음)'
+        results.append({"name": name, "count": row['count']})
+
+    return JsonResponse({"results": results}, status=200)
+
 # ─────────────────────────────────────────────────────────────
 # Notification
 # ─────────────────────────────────────────────────────────────
@@ -1141,7 +1417,7 @@ class NotificationViewSet(mixins.ListModelMixin,
     serializer_class = NotificationSerializer
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAdminOrReadGroup]
-
+    pagination_class = DefaultPagination
     filter_backends = [DjangoFilterBackend, OrderingFilter]
     filterset_class = NotificationFilter
     ordering_fields = ['id', 'created_at']
@@ -1150,6 +1426,10 @@ class NotificationViewSet(mixins.ListModelMixin,
     def get_queryset(self):
         qs = (Notification.objects
               .select_related('user', 'admin', 'report', 'report__animal', 'report__user'))
+
+        # ✅ 상세 조회는 type 필터 없이 전체에서 검색
+        if getattr(self, 'action', None) == 'retrieve':
+            return qs.order_by('-created_at', '-id')
 
         qtype = (self.request.query_params.get('type') or '').strip().lower()
         user  = self.request.user
@@ -1168,6 +1448,7 @@ class NotificationViewSet(mixins.ListModelMixin,
                 return base.order_by('-created_at', '-id')
             return qs.filter(type='individual', user_id=user.id).order_by('-created_at', '-id')
 
+        # 목록에는 type이 꼭 필요 (list에서 400 처리)
         return qs.none()
 
     def list(self, request, *args, **kwargs):
@@ -1407,30 +1688,6 @@ def _require_login_json(view):
 
 DONE_STATUSES = {"처리완료", "종료"}
 
-@require_GET
-@_require_login_json
-def dashboard_report_stats(request):
-    now = timezone.localtime()
-    start_today = now.replace(hour=0, minute=0, second=0, microsecond=0)
-
-    qs = Report.objects.all()
-    total = qs.count()
-
-    field = Report._meta.get_field('report_date')
-    if isinstance(field, DateTimeField):
-        today = qs.filter(report_date__gte=start_today).count()
-    else:
-        today = qs.filter(report_date__gte=start_today.date()).count()
-
-    UNRESOLVED = ("처리중", "접수", "미처리", "대기")
-    unresolved = qs.filter(status__in=UNRESOLVED).count()
-
-    return JsonResponse({
-        "total_reports": total,
-        "today_reports": today,
-        "unresolved_reports": unresolved,
-    })
-
 @api_view(['GET'])
 @authentication_classes([JWTAuthentication])
 @permission_classes([IsAuthenticated])
@@ -1518,42 +1775,118 @@ def dashboard_reporters(request):
 
     return JsonResponse({"results": data})
 
-FCM_TOKEN_RE = re.compile(r'^[A-Za-z0-9:_\-]{100,}$')  # 안드 토큰 보통 140자 안팎
+@csrf_exempt
+@require_http_methods(["PATCH", "POST"])
+@_require_login_json   # ← 이미 대시보드 JSON 엔드포인트에서 쓰던 래퍼 (세션 로그인 확인)  :contentReference[oaicite:0]{index=0}
+def dashboard_report_update_status(request, report_id: int):
+    """
+    PATCH/POST /api/dashboard/reports/<report_id>/status/
+    body: { "status": "checking|on_hold|completed", "reply": "선택(알림용)" }
+    - 세션 로그인된 관리자만 허용 (원하면 is_admin 체크 추가)
+    - 변경 시 개인 알림(개별) upsert
+    """
+    try:
+        rpt: Report = Report.objects.select_related('user').get(id=report_id)
+    except Report.DoesNotExist:
+        return JsonResponse({"detail": "not found"}, status=404)
+
+    # (선택) 관리자만 허용하려면 여기에 is_admin 검사 추가
+    # if not is_admin(request.user): return JsonResponse({"detail": "forbidden"}, status=403)
+
+    try:
+        data = json.loads(request.body.decode("utf-8")) if request.body else {}
+    except Exception:
+        data = {}
+    new_status = (data.get("status") or "").strip()
+    reply      = data.get("reply")  # 선택값, None 허용
+
+    allowed = {c[0] for c in Report.STATUS_CHOICES}  # checking/on_hold/completed  :contentReference[oaicite:1]{index=1}
+    if new_status not in allowed:
+        return JsonResponse({"detail": f"status must be one of {sorted(list(allowed))}"}, status=400)
+
+    old_status = rpt.status
+    if old_status == new_status:
+        return JsonResponse({
+            "report_id": rpt.id,
+            "status": rpt.status,
+            "changed": False
+        }, status=200)
+
+    with transaction.atomic():
+        rpt.status = new_status
+        rpt.save(update_fields=["status"])
+
+        # 상태 변경 시 개인 알림 업서트 (기존 유틸 재사용)  :contentReference[oaicite:2]{index=2}
+        admin_obj = getattr(request.user, "admin", None) if is_admin(request.user) else None
+        _upsert_notification_for_report(
+            report=rpt,
+            reply=(reply or None),
+            status_change=f"{old_status}->{new_status}",
+            admin_obj=admin_obj,
+        )
+
+    return JsonResponse({
+        "report_id": rpt.id,
+        "status": rpt.status,
+        "changed": True
+    }, status=200)
 
 # 토큰 저장 API
+# FCM 등록 토큰은 길고 복잡합니다. 엄격한 정규식은 불필요하게 실패를 유발할 수 있으니
+# 1차 방어선으로 "공백 없음 + 최소 길이" 정도만 확인합니다.
+FCM_TOKEN_RE = re.compile(r"^[^\s]{20,}$")
+
 class DeviceTokenViewSet(mixins.CreateModelMixin, viewsets.GenericViewSet):
     queryset = DeviceToken.objects.all()
     serializer_class = DeviceTokenSerializer
-    # authentication_classes = [JWTAuthentication]
-    permission_classes = [AllowAny]  # 로그인 전 등록 허용
+    permission_classes = [AllowAny]
+    authentication_classes = []  # ← 전체 비활성화가 가능하면 이 한 줄로 끝
+
+    # 만약 ViewSet의 다른 액션은 인증이 필요하다면 ↓ 처럼 분기:
+    # def get_authenticators(self):
+    #     # register_fcm일 때만 인증 안 함
+    #     if getattr(self, 'action', None) == 'register_fcm':
+    #         return []
+    #     return super().get_authenticators()
 
     @action(detail=False, methods=['post'], url_path='register-fcm', permission_classes=[AllowAny])
     def register_fcm(self, request):
-        """
-        POST /api/devices/register-fcm/
-        body: { "token": "<FCM_TOKEN>", "platform": "android" }
-        """
+        # (선택) 안전망: 혹시 클라가 만료 토큰을 보내도 무시하고 진행
+        auth = get_authorization_header(request)
+        if auth:
+            request._request.META.pop('HTTP_AUTHORIZATION', None)
+
         token = (request.data.get('token') or '').strip()
         platform = (request.data.get('platform') or 'android').strip().lower()
-
-        # 1) 형식 검증
         if not token or not FCM_TOKEN_RE.match(token):
             return Response({'detail': 'invalid token'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 2) 업서트 (token은 unique 권장)
-        obj, _ = DeviceToken.objects.update_or_create(
+        obj, created = DeviceToken.objects.get_or_create(
             token=token,
             defaults={
                 'platform': platform,
                 'user': request.user if getattr(request, 'user', None) and request.user.is_authenticated else None,
-                'created_at': timezone.now(),  # 업데이트 타임 찍고 싶으면 updated_at 필드 사용
+                'is_active': True,
             },
         )
-        return Response({'ok': True})
+        if not created:
+            dirty = False
+            if obj.platform != platform:
+                obj.platform = platform; dirty = True
+            if not obj.is_active:
+                obj.is_active = True; dirty = True
+            if dirty:
+                obj.save(update_fields=['platform', 'is_active', 'updated_at'])
+        ser = DeviceTokenSerializer(obj)
+        return Response(ser.data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
     def create(self, request, *args, **kwargs):
+        """
+        POST /api/devices/
+        멱등성: 동일 token이 이미 있으면 200 + 기존 레코드 반환
+        """
         token = (request.data.get("token") or "").strip()
         if token:
-            # 이미 있으면 200으로 돌려주기 (멱등성)
             try:
                 obj = DeviceToken.objects.get(token=token)
                 ser = self.get_serializer(obj)
@@ -1643,3 +1976,25 @@ class FCMTestTopicView(APIView):
             return Response({"message_id": resp, "dry_run": dry})
         except Exception as e:
             return Response({"detail": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+class UpdateReportStatusView(APIView):
+    permission_classes = [IsAdminUser]  # 관리자만 변경
+
+    # 허용 상태값(대시보드에서 쓰는 값과 일치시켜 주세요)
+    ALLOWED = {"checking", "in_progress", "completed", "on_hold"}
+
+    def patch(self, request, pk: int):
+        Report = apps.get_model("dashboard", "Report")  # ← Report는 dashboard 앱에 있음
+        try:
+            rpt = Report.objects.get(pk=pk)
+        except Report.DoesNotExist:
+            return Response({"detail": "report not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        new_status = (request.data or {}).get("status", "")
+        if new_status not in self.ALLOWED:
+            return Response({"detail": "invalid status", "allowed": sorted(self.ALLOWED)},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        rpt.status = new_status
+        rpt.save(update_fields=["status"])
+        return Response({"ok": True, "id": rpt.id, "status": rpt.status})

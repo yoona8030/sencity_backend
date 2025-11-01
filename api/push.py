@@ -1,52 +1,44 @@
+# 파일: sencity_backend/api/push.py
 from __future__ import annotations
-"""
-FCM 브로드캐스트/타겟 푸시 유틸
-- firebase_admin.initialize_app(...) 은 프로젝트 초기화 코드에서 1회 수행
-- create_server_notification=False 로 호출하면 서버 DB(Notification)에는 기록하지 않음
-- FCM Multicast 는 500개 토큰 단위로 청크 전송
-"""
 
 from typing import Iterable, Optional, Dict, Any, Tuple, List
 from dataclasses import dataclass
 import logging
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from django.db import transaction
 from firebase_admin import messaging
+# from django.utils import timezone  # 사용하지 않으면 주석/삭제하세요
 
 from .models import DeviceToken, Notification, User
 
 logger = logging.getLogger(__name__)
 
-# ────────────────────────────────────────────────────────────────────────────────
-# 상수/유틸
-# ────────────────────────────────────────────────────────────────────────────────
+# 멀티캐스트 전송 시 한 번에 보낼 최대 토큰 수 (FCM 권장 한도 500)
+FCM_MULTICAST_LIMIT = 500
 
-FCM_MULTICAST_LIMIT = 500  # 권장 멀티캐스트 최대치
-ANDROID_CHANNEL_ID = "sencity-general"  # ⚠️ RN 클라이언트의 채널 ID와 반드시 동일
+# React Native 측에서 생성한 Android 채널 ID와 반드시 동일해야 합니다.
+ANDROID_CHANNEL_ID = "default"
+
 
 def _to_str_dict(d: Optional[Dict[str, Any]]) -> Dict[str, str]:
-    """FCM data payload 는 문자열 dict 이어야 합니다."""
-    if not d:
-        return {}
-    return {str(k): str(v) for k, v in d.items()}
+    """FCM data payload는 문자열 키/값만 허용하므로 강제 변환합니다."""
+    return {} if not d else {str(k): str(v) for k, v in d.items()}
+
 
 def _chunk(lst: List[str], size: int) -> Iterable[List[str]]:
+    """리스트를 고정 크기 청크로 나눕니다."""
     for i in range(0, len(lst), size):
         yield lst[i : i + size]
+
 
 @dataclass
 class PushResult:
     success: int = 0
     failure: int = 0
 
-    def add(self, other: "PushResult") -> None:
-        self.success += other.success
-        self.failure += other.failure
+    def add(self, s: int, f: int) -> None:
+        self.success += s
+        self.failure += f
 
-# ────────────────────────────────────────────────────────────────────────────────
-# 공개 API
-# ────────────────────────────────────────────────────────────────────────────────
 
 def send_push_only(
     *,
@@ -55,16 +47,19 @@ def send_push_only(
     data: Optional[Dict[str, Any]] = None,
     user_ids: Optional[Iterable[int]] = None,
 ) -> Tuple[int, int]:
-    """서버 DB에 아무것도 기록하지 않고 FCM만 전송."""
+    """
+    서버 Notification 기록 없이 FCM만 전송합니다.
+    반환값: (success_count, failure_count)
+    """
     return send_push_and_record(
         title=title,
         body=body,
         data=data,
         user_ids=user_ids,
-        create_server_notification=False,  # 기록 끔
+        create_server_notification=False,
     )
 
-@transaction.atomic
+
 def send_push_and_record(
     *,
     title: str,
@@ -74,171 +69,144 @@ def send_push_and_record(
     create_server_notification: bool = True,
 ) -> Tuple[int, int]:
     """
-    return: (success_count, failure_count)
+    FCM 전송 + (옵션) 서버 Notification 기록.
+    - user_ids가 주어지면 개별 사용자 알림(Notification type='individual')을 벌크 생성
+    - user_ids가 없으면 그룹 알림(Notification type='group') 1건 생성
+    - FCM 전송 실패 중 Unregistered/NotRegistered/InvalidRegistration 토큰은 DB에서 삭제
+    반환값: (success_count, failure_count)
     """
     payload_data = _to_str_dict(data)
 
     # 1) 대상 토큰 수집
+    qs = DeviceToken.objects.all()
     if user_ids:
-        tokens_qs = DeviceToken.objects.filter(user_id__in=list(user_ids))
-    else:
-        tokens_qs = DeviceToken.objects.all()
+        qs = qs.filter(user_id__in=list(user_ids))
 
-    raw_tokens = list(tokens_qs.values_list("token", flat=True))
-    tokens = [t.strip() for t in raw_tokens if t and t.strip()]
-    # 중복 제거(순서 유지)
-    tokens = list(dict.fromkeys(tokens))
+    # 중복/공백 제거
+    tokens = list(
+        dict.fromkeys(
+            t.strip()
+            for t in qs.values_list("token", flat=True)
+            if t and isinstance(t, str) and t.strip()
+        )
+    )
+    if not tokens:
+        logger.warning("[FCM] no tokens (user_ids=%s)", user_ids)
+        return (0, 0)
 
     # 2) (옵션) 서버 알림 기록
     if create_server_notification:
         if user_ids:
-            target_users = User.objects.filter(id__in=list(user_ids))
-            to_create: List[Notification] = [
-                Notification(
-                    type="individual",
-                    user=u,
-                    reply=body or title or "공지",
-                    status_change=None,
-                    admin=None,
-                    report=None,
-                )
-                for u in target_users
-            ]
-            if to_create:
-                Notification.objects.bulk_create(to_create, ignore_conflicts=True)
+            users = list(User.objects.filter(id__in=list(user_ids)))
+            # 동일 레코드가 이미 존재할 수 있는 상황에 대비해 ignore_conflicts 사용
+            Notification.objects.bulk_create(
+                [
+                    Notification(
+                        type="individual",
+                        user=u,
+                        reply=(body or title or "공지"),
+                        status_change=None,
+                        admin=None,
+                        report=None,
+                    )
+                    for u in users
+                ],
+                ignore_conflicts=True,
+            )
         else:
             Notification.objects.create(
                 type="group",
                 user=None,
-                reply=body or title or "공지",
+                reply=(body or title or "공지"),
                 status_change=None,
                 admin=None,
                 report=None,
             )
 
-    # 3) FCM 전송
-    if not tokens:
-        logger.warning("[FCM] No tokens collected. (user_ids=%s)", user_ids)
-        return (0, 0)
-
-    result = PushResult()
-
-        # 공통 payload
-        # 공통 payload
-    notification_obj = (
-        messaging.Notification(title=title or "공지", body=body or "")
-        if (title or body) else None
-    )
+    # 3) 공통 메시지 구성 (notification + data)
+    notif = messaging.Notification(title=title or "공지", body=body or "")
     android_cfg = messaging.AndroidConfig(
         priority="high",
         notification=messaging.AndroidNotification(channel_id=ANDROID_CHANNEL_ID),
     )
 
+    result = PushResult()
+
+    # 4) 청크 전송
     for chunk in _chunk(tokens, FCM_MULTICAST_LIMIT):
         try:
-            # ─────────────────────────────────────────────────────────
-            # 1) 최신: send_multicast 사용 가능
-            # ─────────────────────────────────────────────────────────
-            if hasattr(messaging, "send_multicast") and hasattr(messaging, "MulticastMessage"):
-                message = messaging.MulticastMessage(
+            responses = []  # send_multicast 응답 상세
+            succ = fail = 0
+
+            if hasattr(messaging, "send_multicast"):
+                msg = messaging.MulticastMessage(
                     tokens=chunk,
-                    notification=notification_obj,
+                    notification=notif,
                     data=payload_data,
                     android=android_cfg,
                 )
-                resp = messaging.send_multicast(message, dry_run=False)
+                resp = messaging.send_multicast(msg, dry_run=False)
                 responses = resp.responses
-                succ = resp.success_count
-                fail = resp.failure_count
-
-            # ─────────────────────────────────────────────────────────
-            # 2) 중간: send_all 사용 가능
-            # ─────────────────────────────────────────────────────────
-            elif hasattr(messaging, "send_all"):
-                messages = [
-                    messaging.Message(
-                        token=t,
-                        notification=notification_obj,
-                        data=payload_data,
-                        android=android_cfg,
-                    )
-                    for t in chunk
-                ]
-                resp = messaging.send_all(messages, dry_run=False)
-                responses = resp.responses
-                succ = resp.success_count
-                fail = resp.failure_count
-
-            # ─────────────────────────────────────────────────────────
-            # 3) 구버전 폴백: per-token send() + ThreadPool로 병렬
-            # ─────────────────────────────────────────────────────────
+                succ, fail = resp.success_count, resp.failure_count
             else:
-                MAX_WORKERS = 8  # 네트워크/서버 여유에 맞게 조절
-                def _send_one(msg):
+                # firebase_admin 구버전 호환
+                for t in chunk:
                     try:
-                        messaging.send(msg, dry_run=False)
-                        return True, None
+                        messaging.send(
+                            messaging.Message(
+                                token=t,
+                                notification=notif,
+                                data=payload_data,
+                                android=android_cfg,
+                            )
+                        )
+                        succ += 1
                     except Exception as e:
-                        return False, e
+                        # send_multicast와 유사한 형태로 응답 어레이를 맞추기 위한 임시 객체
+                        responses.append(
+                            type("R", (), {"success": False, "exception": e})()
+                        )
+                        fail += 1
 
-                messages = [
-                    messaging.Message(
-                        token=t,
-                        notification=notification_obj,
-                        data=payload_data,
-                        android=android_cfg,
+            result.add(succ, fail)
+
+            # 5) 실패 토큰 정리 (Unregistered/NotRegistered/InvalidRegistration)
+            if fail and responses:
+                dead_tokens: List[str] = []
+                for i, r in enumerate(responses):
+                    if getattr(r, "success", False):
+                        continue
+                    exc = getattr(r, "exception", None)
+                    code = getattr(exc, "code", "") or ""
+                    msg = getattr(exc, "message", "") or repr(exc)
+                    tok = (chunk[i] or "")[:16]
+                    logger.warning(
+                        "[FCM][FAIL] token=%s... code=%s msg=%s", tok, code, msg
                     )
-                    for t in chunk
-                ]
 
-                ok = fail = 0
-                responses = []
-                with ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:
-                    futs = [ex.submit(_send_one, msg) for msg in messages]
-                    for i, fut in enumerate(as_completed(futs)):
-                        suc, err = fut.result()
-                        responses.append(type("R", (), {"success": suc, "exception": err})())
-                        if suc:
-                            ok += 1
-                        else:
-                            fail += 1
+                    code_u = str(code).upper()
+                    # 다양한 버전/필드 케이스에 대비해 code/message 모두 검사
+                    if any(k in code_u for k in ("UNREGISTERED", "NOTREGISTERED")) or any(
+                        k in msg.upper() for k in ("NOTREGISTERED", "INVALID_REGISTRATION")
+                    ):
+                        dead_tokens.append(chunk[i])
 
-                succ = ok
-
-            # ─────────────────────────────────────────────────────────
-            # 공통 집계/정리
-            # ─────────────────────────────────────────────────────────
-            result.add(PushResult(success=succ, failure=fail))
-
-            # 실패 사유 로깅 + 무효 토큰 정리
-            if fail:
-                for i, r in enumerate(responses):
-                    if not getattr(r, "success", False):
-                        exc = getattr(r, "exception", None)
-                        reason = getattr(exc, "message", repr(exc)) if exc else "unknown"
-                        logger.warning("[FCM][FAIL] token=%s... reason=%s", (chunk[i] or "")[:16], reason)
-                        if reason and any(s in reason for s in ("NotRegistered", "InvalidRegistration")):
-                            DeviceToken.objects.filter(token=chunk[i]).delete()
+                if dead_tokens:
+                    DeviceToken.objects.filter(token__in=dead_tokens).delete()
 
         except Exception as e:
             logger.exception("[FCM] chunk send error: %s", e)
-            result.add(PushResult(success=0, failure=len(chunk)))
+            # 청크 전체 실패로 간주
+            result.add(0, len(chunk))
 
-            result.add(PushResult(success=succ, failure=fail))
-
-            # 실패 사유 로깅 + 무효 토큰 정리
-            if fail:
-                for i, r in enumerate(responses):
-                    if not getattr(r, "success", False):
-                        exc = getattr(r, "exception", None)
-                        reason = getattr(exc, "message", repr(exc)) if exc else "unknown"
-                        logger.warning("[FCM][FAIL] token=%s... reason=%s", (chunk[i] or "")[:16], reason)
-                        if reason and any(s in reason for s in ("NotRegistered", "InvalidRegistration")):
-                            DeviceToken.objects.filter(token=chunk[i]).delete()
-
-        except Exception as e:
-            logger.exception("[FCM] chunk send error: %s", e)
-            result.add(PushResult(success=0, failure=len(chunk)))
-
-    logger.info("[FCM] multicast done: success=%d, failure=%d", result.success, result.failure)
+    logger.info("[FCM] done: success=%d, failure=%d", result.success, result.failure)
     return (result.success, result.failure)
+
+
+# 외부에서 명시적으로 import할 수 있도록 공개 심볼 지정(선택)
+__all__ = [
+    "send_push_only",
+    "send_push_and_record",
+    "FCM_MULTICAST_LIMIT",
+    "ANDROID_CHANNEL_ID",
+]

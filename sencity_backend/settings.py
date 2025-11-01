@@ -1,15 +1,32 @@
 from pathlib import Path
 from datetime import timedelta
-import os, environ, warnings
+import os, warnings
+import environ   # ← 한 번만
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# 1) .env 먼저 로드
 env = environ.Env()
 environ.Env.read_env(os.path.join(BASE_DIR, ".env"))
+
+# 2) Firebase 키 경로 보장
+os.environ.setdefault(
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    env("GOOGLE_APPLICATION_CREDENTIALS", default=r"C:\Users\a9349\sencity_keys\sencity-firebase.json")
+)
+
+# 3) Firebase 초기화 모듈 임포트
+from sencity_backend import firebase_init  # noqa: F401
+
 
 MODEL_DIR = BASE_DIR / "sencity_classification_model" / "models"
 SECRET_KEY = env('SECRET_KEY')
 DEBUG = env.bool('DEBUG', default=False)
-ALLOWED_HOSTS = ['*']
+CSRF_TRUSTED_ORIGINS = [
+  'http://127.0.0.1:8000',
+  'http://localhost:8000',
+]
+ALLOWED_HOSTS = ['*', 'localhost', '127.0.0.1']
 # 업로드 허용 이미지 타입 (views에서 재사용)
 ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
 ALLOW_ANON_REPORTS = False
@@ -22,12 +39,14 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework_simplejwt',
+    'django.contrib.humanize',
     'django_filters',
     'rest_framework',
     'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
     'api',
     'cctv',
+    'api.ai',
     'inquiries',
     "channels",
     'dashboard',
@@ -38,6 +57,7 @@ INSTALLED_APPS = [
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(minutes=env.int('ACCESS_TOKEN_MIN', default=30)),
     "REFRESH_TOKEN_LIFETIME": timedelta(days=env.int('REFRESH_TOKEN_DAYS', default=7)),
+    "ALGORITHM": "HS256",
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
     "AUTH_HEADER_TYPES": ("Bearer",),
@@ -84,6 +104,7 @@ REST_FRAMEWORK = {
         # 'rest_framework.authentication.SessionAuthentication',
         # "rest_framework.authentication.BasicAuthentication",
         # "rest_framework.authentication.TokenAuthentication",
+        'api.authentication.CookieJWTAuthentication',  # 커스텀(헤더 없으면 쿠키에서)
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
@@ -98,12 +119,12 @@ REST_FRAMEWORK = {
     'DEFAULT_FILTER_BACKENDS': ['django_filters.rest_framework.DjangoFilterBackend'],
 }
 
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.sqlite3',
-#     }
-# }
+# --- CORS 설정 ---
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:8000",
+    "http://127.0.0.1:8000",
+]
 
 # DB (sqlite 기본 / env로 덮어씀)
 if env('DB_ENGINE', default='sqlite3') == 'sqlite3':
@@ -186,14 +207,13 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+IMAGE_PROXY_ALLOWED_HOSTS = [
+    "chosun.com",
+]
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
-
-# CORS
-CORS_ALLOW_ALL_ORIGINS = env.bool('CORS_ALLOW_ALL_ORIGINS', default=False)
-CORS_ALLOWED_ORIGINS = []
 
 # 로그인/로그아웃 경로 설정 (리다이렉트 포함)
 LOGIN_URL = '/accounts/login/'
@@ -206,3 +226,13 @@ ASGI_APPLICATION = "sencity_backend.asgi.application"
 CHANNEL_LAYERS = {
     "default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}
 }
+
+# --- 쿠키 보안 ---
+SESSION_COOKIE_SAMESITE = 'Lax'
+CSRF_COOKIE_SAMESITE   = 'Lax'
+SESSION_COOKIE_SECURE   = False  # 운영(HTTPS)에서는 True
+CSRF_COOKIE_SECURE      = False  # 운영(HTTPS)에서는 True
+
+AI_INGEST_TOKEN = env("AI_INGEST_TOKEN", default="default-key")
+AI_MIN_PROB = env.float("AI_MIN_PROB", default=0.5)
+AI_SYSTEM_USERNAME = env("AI_SYSTEM_USERNAME", default="ai_bot")

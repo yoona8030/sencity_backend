@@ -5,6 +5,10 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- ✅ 초기 주입된 JWT (없으면 빈 문자열) -->
+    <meta name="api-jwt" content="{{ admin_api_token|default:'' }}">
+    <!-- ✅ CSRF (토큰 재발급 엔드포인트가 Django view라 필요) -->
+    <meta name="csrf-token" content="{{ csrf_token }}">
     <title>{% block title %}관리자 페이지{% endblock %}</title>
 
     <link rel="icon" href="{% static 'dashboard/images/favicon.ico' %}" sizes="any" />
@@ -68,6 +72,48 @@
 
         <main class="main-content">{% block content %}{% endblock %} {% block body %}{% endblock %}</main>
     </div>
+    <script defer src="{% static 'dashboard/js/tokenManager.js' %}?v=1"></script>
+    <script defer src="{% static 'dashboard/js/contents.js' %}?v=1"></script>
+
+    <!-- ✅ axios + JWT 쿠키 기반 인증 설정 -->
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script>
+      // ✅ axios 인스턴스 생성
+      const api = axios.create({
+        baseURL: "http://localhost:8000/api",
+        withCredentials: true,  // 쿠키 자동 전송
+      });
+
+      // ✅ csrftoken 쿠키 읽기
+      function getCookie(name) {
+        const v = document.cookie.split('; ').find(r => r.startsWith(name + '='));
+        return v ? decodeURIComponent(v.split('=')[1]) : '';
+      }
+
+      // ✅ 모든 요청에 CSRF 헤더 자동 추가
+      api.interceptors.request.use(cfg => {
+        const csrf = getCookie('csrftoken');
+        if (csrf) cfg.headers['X-CSRFToken'] = csrf;
+        return cfg;
+      });
+
+      // ✅ access 만료 시 자동 재발급 (refresh-cookie)
+      api.interceptors.response.use(
+        res => res,
+        async err => {
+          if (err.response?.status === 401) {
+            try {
+              await api.post('/token/refresh-cookie/');
+              return api.request(err.config);
+            } catch (e) {
+              alert('세션이 만료되었습니다. 다시 로그인해주세요.');
+              window.location.href = '/accounts/login/';
+            }
+          }
+          return Promise.reject(err);
+        }
+      );
+    </script>
 </body>
 
 </html>

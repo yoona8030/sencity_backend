@@ -361,13 +361,23 @@ class Profile(models.Model):
 
 # 토큰 저장 API
 class DeviceToken(models.Model):
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
-    token = models.CharField(max_length=200, unique=True)
+    PLATFORM_CHOICES = (
+      ("android", "Android"),
+      ("ios", "iOS"),
+      ("web", "Web"),
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL
+    )
+    # ⚠️ 200 → 300 권장 (일부 기기/환경에서 200 초과 가능)
+    token = models.CharField(max_length=300, unique=True)
     platform = models.CharField(max_length=20, default='android')
+    is_active = models.BooleanField(default=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         who = getattr(self.user, "username", None) or "anon"
-        return f"{who}:{self.platform}:{self.token[:12]}…"
+        return f"{who}:{self.platform}:{(self.token or '')[:12]}…"
 

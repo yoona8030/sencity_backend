@@ -3,9 +3,10 @@ from __future__ import annotations
 
 import threading
 from typing import Optional
-
+from django.db.models import Count
 from django.utils import timezone
-
+from api.constants import UNRESOLVED_STATUSES
+from api.models import Report
 try:
     from api.metrics.models import Event
 except Exception:
@@ -41,3 +42,29 @@ def update_stats_cache(report_id: Optional[int] = None, delay_sec: float = 0.0):
         t.start()
     else:
         _job()
+
+def get_dashboard_summary():
+    """
+    대시보드 상단 카드용 요약치를 단일 로직으로 산출.
+    - total: 전체 신고 수
+    - today: 오늘 접수 수
+    - unresolved: 미해결(= checking + on_hold)
+    - resolve_rate: 처리율(완료/전체 * 100, 반올림)
+    """
+    today = timezone.localdate()
+
+    total_count = Report.objects.count()
+    today_count = Report.objects.filter(created_at__date=today).count()
+    unresolved_count = Report.objects.filter(status__in=UNRESOLVED_STATUSES).count()
+    completed_count = Report.objects.filter(status="completed").count()
+
+    resolve_rate = 0
+    if total_count > 0:
+        resolve_rate = round((completed_count / total_count) * 100)
+
+    return {
+        "total": total_count,
+        "today": today_count,
+        "unresolved": unresolved_count,
+        "resolve_rate": resolve_rate,
+    }

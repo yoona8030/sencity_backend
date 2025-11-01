@@ -8,6 +8,7 @@ from django.conf.urls.static import static
 urlpatterns = [
     path('admin/', admin.site.urls),
 
+    # ✅ 모든 /api/ 요청은 api.urls 로 연결
     path('api/', include('api.urls')),
 
     path('dashboard/', include('dashboard.urls', namespace='dashboard')),
@@ -18,6 +19,9 @@ urlpatterns = [
     path('accounts/', include('django.contrib.auth.urls')),
 
     path('cctv/', include('cctv.urls')),
+
+    path("api/ai/", include("api.ai.urls")),
+
 ]
 
 if settings.DEBUG:

@@ -1,0 +1,74 @@
+<!-- 헤더 영역 -->
+<div class="list-head"
+     style="display:flex; align-items:center; justify-content:space-between; margin:0 0 12px;">
+  <div style="display:flex; align-items:center; gap:8px;">
+    <strong style="font-size:16px;">최근 생성</strong>
+    <span style="font-size:12px; color:#666;">전체 {{ total }}개</span>
+  </div>
+</div>
+
+<!-- 리스트 영역 -->
+{% if items %}
+  <div class="list-grid"
+       style="display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr));
+              gap:12px; align-items:stretch;">
+    {% for it in items %}
+      <div id="row-{{ it.id }}" class="card"
+           style="border:1px solid #eee; border-radius:12px; padding:12px;
+                  display:flex; flex-direction:column; gap:8px; background:#fff;">
+        <!-- 상단 정보 -->
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+          <div style="font-weight:600; min-width:0;">
+            <div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+              {{ it.title }}
+            </div>
+            <div style="font-size:12px; color:#666; margin-top:2px;">
+              {{ it.kind }} · {{ it.status_label }} · {{ it.updated_human }}
+              {% if it.owner %} · {{ it.owner }}{% endif %}
+            </div>
+          </div>
+          {% if it.is_live %}
+            <span style="font-size:11px; padding:2px 6px; border-radius:999px;
+                         background:#eef9f0; color:#0a7e2f;">LIVE</span>
+          {% else %}
+            <span style="font-size:11px; padding:2px 6px; border-radius:999px;
+                         background:#f6f7fb; color:#666;">임시</span>
+          {% endif %}
+        </div>
+
+        <!-- 하단 버튼 -->
+        <div style="display:flex; gap:8px; margin-top:auto;">
+          <a class="btn" href="{{ it.edit_url }}">편집</a>
+
+          {% if it.is_live %}
+            <!-- 이미 노출 중이면 '내리기' -->
+            <button class="btn"
+                    hx-post="{% url 'dashboard:content_unset_live' pk=it.id %}"
+                    hx-target="#row-{{ it.id }}"
+                    hx-swap="none"
+                    hx-on::after-request="htmx.trigger(document.body, 'recent:refresh'); htmx.trigger(document.body, 'banner:refresh');">
+              내리기
+            </button>
+          {% else %}
+            <!-- 비노출이면 '띄우기' -->
+            <button class="btn primary"
+                    hx-post="{% url 'dashboard:content_set_live' pk=it.id %}"
+                    hx-vals='{"exclusive":"1"}'
+                    hx-target="#row-{{ it.id }}"
+                    hx-swap="none"
+                    hx-on::after-request="htmx.trigger(document.body, 'recent:refresh'); htmx.trigger(document.body, 'banner:refresh');">
+              띄우기
+            </button>
+          {% endif %}
+
+          <button class="btn warn"
+                  hx-get="{% url 'dashboard:content_confirm_delete' pk=it.id %}"
+                  hx-target="body"
+                  hx-swap="beforeend">삭제</button>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div style="color:#777;">최근 생성된 항목이 없습니다.</div>
+{% endif %}

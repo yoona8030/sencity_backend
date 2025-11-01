@@ -1,4 +1,6 @@
 # api/serializers.py
+from __future__ import annotations
+
 import time
 from decimal import Decimal, InvalidOperation
 from rest_framework import serializers
@@ -22,6 +24,12 @@ from .models import (
     Profile, DeviceToken, AppBanner
 )
 from django.db.models.fields.files import FieldFile
+
+# 허용 플랫폼 집합 (모델의 CHOICES를 그대로 사용)
+ALLOWED_PLATFORMS = {p for p, _ in getattr(DeviceToken, "PLATFORM_CHOICES", [])} or {"android", "ios", "web"}
+
+# 재시도 횟수(경합 시)
+RETRIES = 3
 
 User = get_user_model()
 SearchHistory = apps.get_model('api', 'SearchHistory')
@@ -1005,45 +1013,58 @@ RETRIES = 3
 # 토큰 저장 API
 class DeviceTokenSerializer(serializers.ModelSerializer):
     class Meta:
-        model = DeviceToken
-        fields = ['token', 'platform']
+        model = DeviceToken                     # ★ 누락됐던 부분
+        fields = ["id", "user", "token", "platform", "is_active", "updated_at", "created_at"]
+        read_only_fields = ["id", "updated_at", "created_at"]
+
+    def validate_token(self, value: str) -> str:
+        v = (value or "").strip()
+        if not v:
+            raise serializers.ValidationError("token is required")
+        # 모델 max_length와 일치시키세요(권장 512). 초과 시 방어.
+        if len(v) > 512:
+            raise serializers.ValidationError("token too long")
+        return v
+
+    def validate_platform(self, value: str) -> str:
+        v = (value or "android").strip() or "android"
+        if v not in ALLOWED_PLATFORMS:
+            raise serializers.ValidationError(f"platform must be one of {sorted(ALLOWED_PLATFORMS)}")
+        return v
 
     def create(self, validated_data):
-        req = self.context.get('request')
-        user = getattr(req, 'user', None)
+        req = self.context.get("request")
+        user = getattr(req, "user", None)
         user = user if (user and getattr(user, "is_authenticated", False)) else None
 
-        token = (validated_data.get('token') or '').strip()
-        platform = (validated_data.get('platform') or 'android').strip() or 'android'
-        if not token:
-            raise serializers.ValidationError({'token': 'token is required'})
+        token: str = validated_data["token"]
+        platform: str = validated_data.get("platform", "android")
 
         last_exc = None
         for attempt in range(RETRIES):
             try:
                 with transaction.atomic():
-                    # 1) 있으면 가져오고, 없으면 생성
+                    # 1) 업서트
                     obj, created = DeviceToken.objects.get_or_create(
                         token=token,
-                        defaults={'platform': platform, 'user': user},
+                        defaults={"platform": platform, "user": user, "is_active": True},
                     )
-
-                    # 2) 기존 레코드면 필요한 필드만 갱신(변경 있을 때만)
+                    # 2) 기존이면 필요한 필드만 갱신
                     changed = False
                     if obj.platform != platform:
                         obj.platform = platform
                         changed = True
-                    if user and obj.user_id != getattr(user, 'id', None):
+                    if user and obj.user_id != getattr(user, "id", None):
                         obj.user = user
                         changed = True
+                    if not obj.is_active:         # 재등록 시 다시 활성화
+                        obj.is_active = True
+                        changed = True
                     if changed:
-                        obj.save(update_fields=['platform', 'user'])
+                        obj.save(update_fields=["platform", "user", "is_active", "updated_at"])
                     return obj
             except (OperationalError, IntegrityError) as e:
-                # SQLite 잠금/경합 시 짧게 재시도
                 last_exc = e
                 time.sleep(0.15 * (attempt + 1))
-
-        # 반복 실패 시 에러 반환(클라에서 재시도 가능)
-        raise serializers.ValidationError({'detail': f'database busy: {last_exc}'})
+        raise serializers.ValidationError({"detail": f"database busy: {last_exc}"})
 

@@ -1,5 +1,7 @@
 from django.contrib import admin
-from .models import CCTVDevice, MotionSensor, Report, Prediction, Animal, DashboardSetting
+from django.shortcuts import redirect
+from django.urls import reverse
+from .models import CCTVDevice, MotionSensor, Report, Prediction, Animal, DashboardSetting, Notification, NoticeDelivery, Content
 
 admin.site.site_header = "SENCITY 관리자"
 admin.site.site_title  = "SENCITY 관리자"
@@ -27,9 +29,9 @@ class AnimalAdmin(admin.ModelAdmin):
 
 @admin.register(Report)
 class ReportAdmin(admin.ModelAdmin):
-    list_display   = ('id','report_date','title','animal','status','report_region','user')
-    list_filter    = ('status','report_date','animal')
-    search_fields  = ('title','animal__name','report_region','user__username')
+    list_display = ("id","animal_label","status","report_region","report_date","source","device","prob")
+    list_filter  = ("status","source","device")
+    search_fields = ("animal_name","report_region","title")
     actions            = ['mark_handled']
     date_hierarchy     = 'report_date'     # ← 날짜 네비게이션 추가(편의)
     list_per_page      = 30
@@ -50,16 +52,81 @@ class PredictionAdmin(admin.ModelAdmin):
 
 @admin.register(DashboardSetting)
 class DashboardSettingAdmin(admin.ModelAdmin):
-    list_display = ("id","default_period","default_sort","maintenance_mode","updated_at")
-
-    fieldsets = (
-        ("기본 보기", {"fields": ("default_period","default_sort")}),
-        ("미해결/지연", {"fields": ("unresolved_statuses","aging_threshold_days")}),
-        ("알림", {"fields": ("notify_status_change","quiet_hours_start","quiet_hours_end")}),
-        ("유지보수", {"fields": ("maintenance_mode","maintenance_message")}),
-        ("지도", {"fields": ("map_provider","map_api_key")}),
+    # 목록 컬럼(실제로는 목록 페이지로 잘 가지 않게 리다이렉트 처리함)
+    list_display = (
+        "id",
+        "default_period",
+        "default_sort",
+        "page_size",           # 추가 필드
+        "notify_sound",        # 추가 필드
+        "notify_desktop",      # 추가 필드
+        "maintenance_mode",
+        "map_provider",
+        "updated_at",
     )
 
+    # 좌측 필드 그룹 구성
+    fieldsets = (
+        ("기본 보기", {
+            "fields": ("default_period", "default_sort", "page_size", "date_format")  # page_size, date_format 추가
+        }),
+        ("미해결/지연", {
+            "fields": ("unresolved_statuses", "aging_threshold_days")
+        }),
+        ("알림", {
+            "fields": (
+                "notify_status_change",
+                "notify_sound",      # 추가
+                "notify_desktop",    # 추가
+                "quiet_hours_start",
+                "quiet_hours_end",
+            )
+        }),
+        ("유지보수", {
+            "fields": ("maintenance_mode", "maintenance_message")
+        }),
+        ("지도", {
+            "fields": ("map_provider", "map_api_key")
+        }),
+        ("개인정보/표현", {
+            "fields": ("mask_reporter",)  # 추가
+        }),
+    )
+
+    readonly_fields = ("updated_at",)  # 필요 시 우측 사이드 패널로 옮길 수도 있음
+
+    # ─────────────────────────────
+    # 싱글톤 제약: 1개만 존재하도록
+    # ─────────────────────────────
     def has_add_permission(self, request):
-        # 싱글톤: 하나만 허용
-        return not DashboardSetting.objects.exists()
+        """레코드가 없을 때만 추가 허용"""
+        exists = DashboardSetting.objects.exists()
+        return not exists
+
+    def has_delete_permission(self, request, obj=None):
+        """삭제는 금지(싱글톤 유지)"""
+        return False
+
+    # 목록 화면 접근 시, 곧바로 단일 레코드 수정 화면으로 라우팅
+    def changelist_view(self, request, extra_context=None):
+        obj = DashboardSetting.get_solo()
+        url = reverse("admin:dashboard_dashboardsetting_change", args=[obj.pk])
+        return redirect(url)
+
+    # 추가 화면 접근 시에도 이미 있으면 변경 화면으로 이동
+    def add_view(self, request, form_url="", extra_context=None):
+        if DashboardSetting.objects.exists():
+            obj = DashboardSetting.get_solo()
+            url = reverse("admin:dashboard_dashboardsetting_change", args=[obj.pk])
+            return redirect(url)
+        return super().add_view(request, form_url, extra_context)
+
+    # 저장 후에도 목록으로 돌아가면 다시 변경화면으로 라우팅되므로 UX 일관
+    # (필요시 message 추가 가능)
+
+@admin.register(Content)
+class ContentAdmin(admin.ModelAdmin):
+    list_display = ("id", "title", "kind", "status_label", "is_live", "owner", "updated_at", "created_at")
+    list_filter  = ("kind", "status_label", "is_live")
+    search_fields = ("title", "kind")
+    ordering = ("-updated_at", "-id")

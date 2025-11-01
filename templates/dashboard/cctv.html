@@ -1,320 +1,319 @@
 {% extends "dashboard/base.html" %} {% load static %} {% block title %}CCTV 관리{% endblock %} {% block extra_head %}
-<link rel="stylesheet" href="{% static 'dashboard/css/cctv.css' %}?v=2025-10-15" /> {% endblock %} {% block content %}
+<link rel="stylesheet" href="{% static 'dashboard/css/cctv.css' %}?v=2025-10-15" />
+{% endblock %} {% block content %}
 <div class="dashboard-body wrap page-cctv">
-    <h1 class="page-title">CCTV 관리</h1>
+  <h1 class="page-title">CCTV 관리</h1>
 
-    <section class="cctv-grid">
-        <!-- 좌측 패널 -->
-        <aside class="left-col">
-            <article class="card devices-card">
-                <h2 class="card-title">CCTV 디바이스 현황</h2>
-                <ul id="device-list" class="device-list">
-                    <!-- JS 렌더 -->
-                </ul>
-            </article>
+  <section class="cctv-grid">
+    <!-- 좌측 패널 -->
+    <aside class="left-col">
+      <article class="card devices-card">
+        <h2 class="card-title">CCTV 디바이스 현황</h2>
+        <ul id="device-list" class="device-list">
+          <!-- JS 렌더 -->
+        </ul>
+      </article>
 
-            <article class="card sensors-card">
-                <h2 class="card-title">모션 센서</h2>
-                <div id="sensor-grid" class="sensor-grid">
-                    <!-- JS 렌더 -->
-                </div>
-            </article>
-        </aside>
+      <article class="card sensors-card">
+        <h2 class="card-title">모션 센서</h2>
+        <div id="sensor-grid" class="sensor-grid"><!-- JS 렌더 --></div>
+      </article>
+    </aside>
 
-        <!-- 우측: 메인 뷰어 -->
-        <div class="right-col">
-            <article class="card viewer-card">
-                <div class="viewer-head">
-                    <span class="viewer-title" id="viewer-title">실시간 영상 · 카메라 1</span>
+    <!-- 우측: 메인 뷰어 -->
+    <div class="right-col">
+      <article class="card viewer-card">
+        <div class="viewer-head">
+          <span class="viewer-title" id="viewer-title">실시간 영상 · 카메라 1</span>
 
-                    <div class="cam-tabs" role="tablist" aria-label="카메라 전환">
-                        <button class="cam-tab is-active" data-cam="1" aria-selected="true">1</button>
-                        <button class="cam-tab" data-cam="2">2</button>
-                        <button class="cam-tab" data-cam="3">3</button>
-                        <button class="cam-tab" data-cam="4">4</button>
-                    </div>
-                </div>
+          <div class="cam-tabs" role="tablist" aria-label="카메라 전환">
+            <button class="cam-tab is-active" data-cam="1" aria-selected="true">1</button>
+            <button class="cam-tab" data-cam="2">2</button>
+            <button class="cam-tab" data-cam="3">3</button>
+            <button class="cam-tab" data-cam="4">4</button>
+          </div>
+          <!-- ✅ 신고 버튼/모달 제거 -->
+        </div>
 
-                <div class="viewer-body">
-                    <!-- 기본: MJPEG 이미지 스트림 표시 -->
-                    <img id="viewer-img" class="viewer-media" alt="카메라 1" style="display:block" />
-                    <video id="viewer-video" class="viewer-media" autoplay muted loop playsinline controls style="display:none">
+        <div class="viewer-body">
+          <img id="viewer-img" class="viewer-media" alt="카메라 1" style="display: block" />
+          <video id="viewer-video" class="viewer-media" autoplay muted loop playsinline controls style="display: none">
+            <source id="viewer-source" src="{% static 'dashboard/videos/sample1.mp4' %}" type="video/mp4" />
             <source id="viewer-source" src="{% static 'dashboard/videos/sample.mp4' %}" type="video/mp4" />
             HTML5 동영상을 지원하지 않는 브라우저입니다.
           </video>
-                </div>
-
-                <div class="viewer-foot" id="viewer-foot">카메라 1</div>
-            </article>
         </div>
-    </section>
+
+        <div class="viewer-foot" id="viewer-foot">카메라 1</div>
+      </article>
+    </div>
+  </section>
 </div>
 
 <script>
-    (function() {
-        var API_DEVICES = '/dashboard/api/cctv-devices/';
-        var API_SENSORS = '/dashboard/api/cctv-sensors/';
+  (function () {
+    var API_DEVICES = '/dashboard/api/cctv-devices/';
+    var API_SENSORS = '/dashboard/api/cctv-sensors/';
 
-        /* 실제 소스 매핑: 1번을 ESP32-CAM 스트림으로 교체 */
-        var CAM_SOURCES = {
-            1: {
-                type: 'image',
-                src: 'http://172.21.206.49:81/stream'
-            }, // ESP32-CAM MJPEG
-            2: {
-                type: 'video',
-                src: '{% static "dashboard/videos/sample.mp4" %}'
-            },
-            3: {
-                type: 'image',
-                src: '{% static "dashboard/images/sample_cctv_3.jpg" %}'
-            },
-            4: {
-                type: 'image',
-                src: '{% static "dashboard/images/sample_cctv_4.jpg" %}'
-            },
-        };
+    /* 실제 소스 매핑 */
+    var CAM_SOURCES = {
+      // 1: { type: 'image', src: 'http://192.168.45.135:81/stream' }, // ESP32-CAM MJPEG
+      1: { type: 'video', src: '{% static "dashboard/videos/sample1.mp4" %}' },
+      2: { type: 'video', src: '{% static "dashboard/videos/sample.mp4" %}' },
+      3: { type: 'image', src: '{% static "dashboard/images/sample_cctv_3.jpg" %}' },
+      4: { type: 'image', src: '{% static "dashboard/images/sample_cctv_4.jpg" %}' },
+    };
 
-        function safeFetch(url) {
-            return fetch(url, {
-                    credentials: 'same-origin'
-                })
-                .then(function(r) {
-                    if (!r.ok) throw new Error('fetch error');
-                    return r.json();
-                });
+    function safeFetch(url) {
+      return fetch(url, { credentials: 'same-origin' }).then(function (r) {
+        if (!r.ok) throw new Error('fetch error');
+        return r.json();
+      });
+    }
+
+    /* 디바이스 렌더 */
+    function renderDevices(items) {
+      var list = document.getElementById('device-list');
+      if (!list) return;
+      if (!items || !items.length) {
+        list.innerHTML = '<li class="device-empty">디바이스 데이터가 없습니다.</li>';
+        return;
+      }
+      list.innerHTML = items
+        .map(function (d, i) {
+          var idx = i + 1;
+          var online = !!d.online;
+          var cls = online ? 'online' : 'offline';
+          var st = online ? 'ONLINE' : 'OFFLINE';
+          var name = d.name || 'CCTV ' + idx;
+          return (
+            '<li class="device-item ' +
+            cls +
+            ' clickable" data-cam="' +
+            idx +
+            '">' +
+            '<div class="device-left">' +
+            '<i class="fa-solid fa-video"></i>' +
+            '<div class="device-info">' +
+            '<div class="name">' +
+            name +
+            '</div>' +
+            '<div class="state">' +
+            st +
+            '</div>' +
+            '</div>' +
+            '</div>' +
+            '<span class="dot ' +
+            (online ? 'ok' : 'bad') +
+            '"></span>' +
+            '</li>'
+          );
+        })
+        .join('');
+    }
+
+    /* 센서 렌더 */
+    function renderSensors(items) {
+      var grid = document.getElementById('sensor-grid');
+      if (!grid) return;
+      if (!items || !items.length) {
+        grid.innerHTML = '<div class="sensor-empty">센서 데이터가 없습니다.</div>';
+        return;
+      }
+      grid.innerHTML = items
+        .map(function (s, i) {
+          var idx = i + 1;
+          var det = !!s.detected;
+          return (
+            '<div class="sensor ' +
+            (det ? 'detected' : '') +
+            ' clickable" data-cam="' +
+            idx +
+            '">' +
+            '<div class="sensor-name">' +
+            (s.name || 'CCTV ' + idx) +
+            '</div>' +
+            '<div class="sensor-text">' +
+            (det ? '구역 감지됨' : '구역 오프라인') +
+            '</div>' +
+            '</div>'
+          );
+        })
+        .join('');
+    }
+
+    /* 좌측 상태 갱신 */
+    function updateLeftStatus(selectedCamNo) {
+      document.querySelectorAll('#device-list .device-item').forEach(function (el) {
+        var cam = Number(el.getAttribute('data-cam'));
+        var isSelected = cam === Number(selectedCamNo);
+        el.classList.toggle('active', isSelected);
+        el.classList.toggle('online', isSelected);
+        el.classList.toggle('offline', !isSelected);
+        var stateEl = el.querySelector('.device-info .state');
+        if (stateEl) stateEl.textContent = isSelected ? 'ONLINE' : 'OFFLINE';
+        var dot = el.querySelector('.dot');
+        if (dot) {
+          dot.classList.toggle('ok', isSelected);
+          dot.classList.toggle('bad', !isSelected);
         }
+      });
 
-        /* 디바이스 렌더: data-cam 부여 */
-        function renderDevices(items) {
-            var list = document.getElementById('device-list');
-            if (!list) return;
-            if (!items || !items.length) {
-                list.innerHTML = '<li class="device-empty">디바이스 데이터가 없습니다.</li>';
-                return;
-            }
-            list.innerHTML = items.map(function(d, i) {
-                var idx = i + 1;
-                var online = !!d.online;
-                var cls = online ? 'online' : 'offline';
-                var st = online ? 'ONLINE' : 'OFFLINE';
-                var name = d.name || ('CCTV ' + idx);
-                return (
-                    '<li class="device-item ' + cls + ' clickable" data-cam="' + idx + '">' +
-                    '<div class="device-left">' +
-                    '<i class="fa-solid fa-video"></i>' +
-                    '<div class="device-info">' +
-                    '<div class="name">' + name + '</div>' +
-                    '<div class="state">' + st + '</div>' +
-                    '</div>' +
-                    '</div>' +
-                    '<span class="dot ' + (online ? "ok" : "bad") + '"></span>' +
-                    '</li>'
-                );
-            }).join('');
-        }
+      document.querySelectorAll('#sensor-grid .sensor').forEach(function (el) {
+        var cam = Number(el.getAttribute('data-cam'));
+        var isSelected = cam === Number(selectedCamNo);
+        el.classList.toggle('active', isSelected);
+        el.classList.toggle('detected', isSelected);
+        var textEl = el.querySelector('.sensor-text');
+        if (textEl) textEl.textContent = isSelected ? '구역 감지됨' : '구역 오프라인';
+      });
+    }
 
-        /* 센서 렌더: data-cam 부여 */
-        function renderSensors(items) {
-            var grid = document.getElementById('sensor-grid');
-            if (!grid) return;
-            if (!items || !items.length) {
-                grid.innerHTML = '<div class="sensor-empty">센서 데이터가 없습니다.</div>';
-                return;
-            }
-            grid.innerHTML = items.map(function(s, i) {
-                var idx = i + 1;
-                var det = !!s.detected;
-                return (
-                    '<div class="sensor ' + (det ? 'detected' : '') + ' clickable" data-cam="' + idx + '">' +
-                    '<div class="sensor-name">' + (s.name || ('CCTV ' + idx)) + '</div>' +
-                    '<div class="sensor-text">' + (det ? '구역 감지됨' : '구역 오프라인') + '</div>' +
-                    '</div>'
-                );
-            }).join('');
-        }
+    /* 뷰어 탭 제어 */
+    function bindCamTabs() {
+      var tabs = document.querySelectorAll('.cam-tab');
+      var img = document.getElementById('viewer-img');
+      var video = document.getElementById('viewer-video');
+      var vsrc = document.getElementById('viewer-source');
+      var title = document.getElementById('viewer-title');
+      var foot = document.getElementById('viewer-foot');
+      var STREAM_URL = CAM_SOURCES[1].src;
 
-        /* ▼ 좌측 상태를 '선택된 카메라' 기준으로 강제 동기화 */
-        function updateLeftStatus(selectedCamNo) {
-            // CCTV 디바이스
-            document.querySelectorAll('#device-list .device-item').forEach(function(el) {
-                var cam = Number(el.getAttribute('data-cam'));
-                var isSelected = cam === Number(selectedCamNo);
+      function showImage(src, label) {
+        try {
+          video.pause();
+        } catch (e) {}
+        video.style.display = 'none';
+        img.src = src;
+        img.alt = label;
+        img.style.display = 'block';
+      }
 
-                el.classList.toggle('active', isSelected);
-                el.classList.toggle('online', isSelected);
-                el.classList.toggle('offline', !isSelected);
+      function showVideo(src, label) {
+        img.style.display = 'none';
+        if (vsrc.src !== src) vsrc.src = src;
+        video.load();
+        video.style.display = 'block';
+        video.play().catch(function () {});
+      }
 
-                var stateEl = el.querySelector('.device-info .state');
-                if (stateEl) stateEl.textContent = isSelected ? 'ONLINE' : 'OFFLINE';
+      function reloadStream() {
+        if (!STREAM_URL) return;
+        var bust = STREAM_URL + (STREAM_URL.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now();
+        if (img.style.display !== 'none') img.src = bust;
+      }
+      document.getElementById('viewer-img').addEventListener('error', function () {
+        setTimeout(reloadStream, 3000);
+      });
+      document.addEventListener('visibilitychange', function () {
+        if (!document.hidden) reloadStream();
+      });
 
-                var dot = el.querySelector('.dot');
-                if (dot) {
-                    dot.classList.toggle('ok', isSelected);
-                    dot.classList.toggle('bad', !isSelected);
-                }
-            });
-
-            // 모션 센서
-            document.querySelectorAll('#sensor-grid .sensor').forEach(function(el) {
-                var cam = Number(el.getAttribute('data-cam'));
-                var isSelected = cam === Number(selectedCamNo);
-
-                el.classList.toggle('active', isSelected);
-                el.classList.toggle('detected', isSelected);
-
-                var textEl = el.querySelector('.sensor-text');
-                if (textEl) textEl.textContent = isSelected ? '구역 감지됨' : '구역 오프라인';
-            });
-        }
-
-        /* 뷰어 전환/표시 */
-        function bindCamTabs() {
-            var tabs = document.querySelectorAll('.cam-tab');
-            var img = document.getElementById('viewer-img');
-            var video = document.getElementById('viewer-video');
-            var vsrc = document.getElementById('viewer-source');
-            var title = document.getElementById('viewer-title');
-            var foot = document.getElementById('viewer-foot');
-
-            var STREAM_URL = CAM_SOURCES[1].src; // 재접속용 참조
-
-            function showImage(src, label) {
-                try {
-                    video.pause();
-                } catch (e) {}
-                video.style.display = 'none';
-                img.src = src;
-                img.alt = label;
-                img.style.display = 'block';
-            }
-
-            function showVideo(src, label) {
-                img.style.display = 'none';
-                if (vsrc.src !== src) vsrc.src = src;
-                video.load();
-                video.style.display = 'block';
-                video.play().catch(function() {});
-            }
-
-            function reloadStream() {
-                if (!STREAM_URL) return;
-                var bust = STREAM_URL + (STREAM_URL.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now();
-                if (img.style.display !== 'none') img.src = bust;
-            }
-            document.getElementById('viewer-img').addEventListener('error', function() {
-                setTimeout(reloadStream, 3000);
-            });
-            document.addEventListener('visibilitychange', function() {
-                if (!document.hidden) reloadStream();
-            });
-
-            function activate(n) {
-                // 탭 UI
-                tabs.forEach(function(b) {
-                    var on = b.getAttribute('data-cam') === String(n);
-                    b.classList.toggle('is-active', on);
-                    b.setAttribute('aria-selected', on ? 'true' : 'false');
-                });
-
-                // 미디어 전환
-                var cfg = CAM_SOURCES[n] || CAM_SOURCES[1];
-                var label = '카메라 ' + n;
-                if (cfg.type === 'video') {
-                    showVideo(cfg.src, label);
-                } else {
-                    if (n === 1) STREAM_URL = cfg.src;
-                    showImage(cfg.src, label);
-                }
-
-                // 타이틀/풋터
-                title.textContent = '실시간 영상 · ' + label;
-                foot.textContent = label;
-
-                // 좌측 상태 동기화
-                updateLeftStatus(n);
-            }
-
-            // 탭 클릭 바인딩
-            tabs.forEach(function(b) {
-                b.addEventListener('click', function() {
-                    activate(this.getAttribute('data-cam'));
-                });
-            });
-
-            // 좌측 리스트/센서를 탭처럼 동작시키기 (이벤트 위임)
-            function goToCam(n) {
-                var btn = document.querySelector('.cam-tab[data-cam="' + n + '"]');
-                if (btn) btn.click(); // 기존 로직 재사용
-                var player = document.querySelector('.viewer-card');
-                if (player) player.scrollIntoView({
-                    behavior: 'smooth',
-                    block: 'nearest'
-                });
-            }
-
-            var deviceList = document.getElementById('device-list');
-            if (deviceList) {
-                deviceList.addEventListener('click', function(e) {
-                    var item = e.target.closest('.device-item[data-cam]');
-                    if (!item) return;
-                    goToCam(item.getAttribute('data-cam'));
-                });
-            }
-
-            var sensorGrid = document.getElementById('sensor-grid');
-            if (sensorGrid) {
-                sensorGrid.addEventListener('click', function(e) {
-                    var card = e.target.closest('.sensor[data-cam]');
-                    if (!card) return;
-                    goToCam(card.getAttribute('data-cam'));
-                });
-            }
-
-            // 초기 상태
-            activate(1);
-        }
-
-        function load() {
-            safeFetch(API_DEVICES).then(renderDevices).catch(function() {
-                // 더미
-                renderDevices([{
-                    name: 'CCTV 1',
-                    online: true
-                }, {
-                    name: 'CCTV 2',
-                    online: false
-                }, {
-                    name: 'CCTV 3',
-                    online: false
-                }, {
-                    name: 'CCTV 4',
-                    online: false
-                }, ]);
-            });
-
-            safeFetch(API_SENSORS).then(renderSensors).catch(function() {
-                // 더미
-                renderSensors([{
-                    name: 'CCTV 1',
-                    detected: true
-                }, {
-                    name: 'CCTV 2',
-                    detected: false
-                }, {
-                    name: 'CCTV 3',
-                    detected: false
-                }, {
-                    name: 'CCTV 4',
-                    detected: false
-                }, ]);
-            });
-        }
-
-        document.addEventListener('DOMContentLoaded', function() {
-            load();
-            bindCamTabs();
+      function activate(n) {
+        tabs.forEach(function (b) {
+          var on = b.getAttribute('data-cam') === String(n);
+          b.classList.toggle('is-active', on);
+          b.setAttribute('aria-selected', on ? 'true' : 'false');
         });
-    })();
+        var cfg = CAM_SOURCES[n] || CAM_SOURCES[1];
+        var label = '카메라 ' + n;
+        if (cfg.type === 'video') {
+          showVideo(cfg.src, label);
+        } else {
+          if (n === 1) STREAM_URL = cfg.src;
+          showImage(cfg.src, label);
+        }
+        title.textContent = '실시간 영상 · ' + label;
+        foot.textContent = label;
+        updateLeftStatus(n);
+      }
+
+      tabs.forEach(function (b) {
+        b.addEventListener('click', function () {
+          activate(this.getAttribute('data-cam'));
+        });
+      });
+
+      var deviceList = document.getElementById('device-list');
+      if (deviceList) {
+        deviceList.addEventListener('click', function (e) {
+          var item = e.target.closest('.device-item[data-cam]');
+          if (!item) return;
+          activate(item.getAttribute('data-cam'));
+        });
+      }
+
+      var sensorGrid = document.getElementById('sensor-grid');
+      if (sensorGrid) {
+        sensorGrid.addEventListener('click', function (e) {
+          var card = e.target.closest('.sensor[data-cam]');
+          if (!card) return;
+          activate(card.getAttribute('data-cam'));
+        });
+      }
+
+      activate(1);
+    }
+
+    /* 초기 로드 */
+    function load() {
+      safeFetch(API_DEVICES)
+        .then(renderDevices)
+        .catch(function () {
+          renderDevices([
+            { name: 'CCTV 1', online: true },
+            { name: 'CCTV 2', online: false },
+            { name: 'CCTV 3', online: false },
+            { name: 'CCTV 4', online: false },
+          ]);
+        });
+      safeFetch(API_SENSORS)
+        .then(renderSensors)
+        .catch(function () {
+          renderSensors([
+            { name: 'CCTV 1', detected: true },
+            { name: 'CCTV 2', detected: false },
+            { name: 'CCTV 3', detected: false },
+            { name: 'CCTV 4', detected: false },
+          ]);
+        });
+    }
+
+    /* 실행 */
+    document.addEventListener('DOMContentLoaded', function () {
+      load();
+      bindCamTabs();
+
+      // WebSocket (AI 실시간 라벨 표시만 유지)
+      const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+      const camId = 1;
+      const wsUrl = `${scheme}://${location.host}/ws/cctv/${camId}/`;
+      const ws = new WebSocket(wsUrl);
+
+      ws.onopen = () => console.log('[WS] 연결됨:', wsUrl);
+      ws.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          const foot = document.getElementById('viewer-foot');
+          if (foot && data.label) {
+            const pct = typeof data.prob === 'number' ? (data.prob * 100).toFixed(1) : '';
+            foot.textContent = pct ? `${data.label} (${pct}%) 감지` : `${data.label} 감지`;
+          }
+          if (data.cameraId) {
+            const sel = `.sensor[data-cam="${data.cameraId}"]`;
+            const sensorEl = document.querySelector(sel);
+            if (sensorEl) {
+              sensorEl.classList.add('detected');
+              const txt = sensorEl.querySelector('.sensor-text');
+              if (txt) txt.textContent = `${data.label || '목표'} 감지`;
+            }
+          }
+        } catch (err) {
+          console.warn('WS 메시지 파싱 오류', err);
+        }
+      };
+      ws.onclose = () => console.warn('[WS] 연결 종료됨');
+    });
+  })();
 </script>
 {% endblock %}

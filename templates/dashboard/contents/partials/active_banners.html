@@ -1,0 +1,35 @@
+{% if items %}
+  <div class="grid" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:12px;">
+    {% for it in items %}
+      <div class="card" style="border:1px solid #eee; border-radius:10px; padding:12px;">
+        <div style="font-weight:600; margin-bottom:6px;">{{ it.title }}</div>
+        <div style="font-size:12px; color:#666;">업데이트: {{ it.updated_human }}</div>
+
+        <div style="margin-top:10px; display:flex; gap:8px;">
+          {# 원본에 맞춰 언셋 URL 다르게 호출 #}
+          {% if it.unset_live_url == 'dashboard:content_unset_live_appbanner' %}
+            <button class="btn"
+                    hx-post="{% url 'dashboard:content_unset_live_appbanner' pk=it.id %}"
+                    hx-swap="none"
+                    hx-on::after-request="htmx.trigger(document.body, 'banner:refresh'); htmx.trigger(document.body, 'recent:refresh');">
+              내리기
+            </button>
+          {% else %}
+            <button class="btn"
+                    hx-post="{% url 'dashboard:content_unset_live' pk=it.id %}"
+                    hx-swap="none"
+                    hx-on::after-request="htmx.trigger(document.body, 'banner:refresh'); htmx.trigger(document.body, 'recent:refresh');">
+              내리기
+            </button>
+          {% endif %}
+
+          {% if it.edit_url %}
+            <a class="btn ghost" href="{{ it.edit_url }}">편집</a>
+          {% endif %}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div style="color:#777;">현재 앱에 노출 중인 배너가 없습니다.</div>
+{% endif %}

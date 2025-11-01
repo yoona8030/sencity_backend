@@ -15,7 +15,9 @@ from django.views.decorators.cache import cache_page
 from rest_framework import permissions, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.permissions import IsAuthenticatedOrReadOnly
 
+from .services import get_dashboard_summary
 from .models import Event
 # ✅ Option A: alias import
 from .serializers import (
@@ -229,3 +231,9 @@ class PingView(APIView):
 
     def get(self, request):
         return Response({"ok": True, "ts": timezone.now().isoformat()}, status=200)
+
+class DashboardSummaryAPI(APIView):
+    permission_classes = [IsAuthenticatedOrReadOnly]
+
+    def get(self, request):
+        return Response(get_dashboard_summary())
