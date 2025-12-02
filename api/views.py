@@ -45,7 +45,6 @@ except Exception:
     HAVE_JWT = False
 
 from .push import send_push_only
-from .ml import predict_topk, predict_topk_grouped  # 모델 유틸
 from .utils import is_admin
 from .utils.fcm import send_fcm_to_token, send_fcm_to_topic
 from .models import (
@@ -1018,212 +1017,6 @@ class ReverseGeocodeView(APIView):
         except Exception as e:
             return Response({'detail': str(e)}, status=502)
 
-# ---------- AI 인식(더미) ----------
-class RecognizeAnimalView(APIView):
-    permission_classes = [AllowAny]
-    parser_classes = [MultiPartParser, FormParser]
-
-    MAX_UPLOAD = 12_000_000  # 5MB
-
-    _ALIAS_EN = {
-        "goat": "goat", "roe deer": "roe deer",
-        "great egret": "egret", "intermediate egret": "egret", "little egret": "egret", "egret": "egret",
-        "grey heron": "heron", "gray heron": "heron", "heron": "heron",
-        "hare": "hare",
-        "korean squirrel": "squirrel", "eurasian red squirrel": "squirrel", "squirrel": "squirrel",
-        "chipmunk": "chipmunk", "wild boar": "wild boar", "raccoon": "raccoon",
-        "asiatic black bear": "asiatic black bear", "weasel": "weasel", "dog": "dog", "cat": "cat",
-    }
-
-    _ALIAS_KO = {
-        "goat": "고라니", "roe deer": "노루", "egret": "중대백로", "heron": "왜가리",
-        "squirrel": "다람쥐", "chipmunk": "청설모", "wild boar": "멧돼지", "weasel": "족제비",
-        "dog": "강아지", "cat": "고양이", "raccoon": "너구리", "asiatic black bear": "반달가슴곰",
-        "hare": "멧토끼",
-    }
-
-    _GROUP_LABEL_KO = {
-        "deer": "고라니/노루",
-        "heron_egret": "중대백로/왜가리",
-        "sciuridae": "다람쥐/청설모",
-    }
-    # rep_eng -> group 코드 강제 매핑
-    _ENG_TO_GROUP = {
-        "goat": "deer",
-        "roe deer": "deer",
-        "egret": "heron_egret",
-        "heron": "heron_egret",
-        "squirrel": "sciuridae",
-        "chipmunk": "sciuridae",
-    }
-
-    @classmethod
-    def _norm_eng(cls, label_en: str) -> str:
-        k = (label_en or "").strip().lower()
-        return cls._ALIAS_EN.get(k, k)
-
-    @classmethod
-    def _to_kor(cls, db_key_en: str) -> Optional[str]:
-        return cls._ALIAS_KO.get(db_key_en)
-
-    def _find_animal(self, rep_eng: str, display_ko: Optional[str]):
-        qs = Animal.objects.all()
-        q = Q(name_eng__iexact=rep_eng)
-        if display_ko:
-            q |= Q(name_kor__iexact=display_ko)
-        return qs.filter(q).order_by("id").first()
-
-    def post(self, request: Request):
-        f = request.FILES.get("photo") or request.FILES.get("image")
-        if not f:
-            return Response({"detail": "photo(또는 image) 파일이 필요합니다."}, status=400)
-
-        # 1) 크기 제한
-        if getattr(f, "size", 0) > self.MAX_UPLOAD:
-            return Response({"detail": "file too large"}, status=413)
-
-        # 2) 포맷 검증 + EXIF 회전 보정 + RGB 변환
-        try:
-            img = Image.open(f)
-            img.load()
-            try:
-                from PIL import ImageOps
-                img = ImageOps.exif_transpose(img)
-            except Exception:
-                pass
-            if img.mode != "RGB":
-                img = img.convert("RGB")
-        except Exception:
-            return Response({"detail": "invalid image"}, status=400)
-
-        grouped = (request.query_params.get("grouped") in ("1", "true", "yes"))
-
-        if grouped:
-            topg = predict_topk_grouped(img, k=3)
-            results = []
-            for g in topg:
-                members = g.get("members") or []           # 예: [("Goat", 0.99), ("Roe deer", 0.01)]
-                top_member_en = members[0][0] if members else ""
-                rep_eng = self._norm_eng(top_member_en)    # "goat" 등
-
-                # ✅ group 코드 정규화: 모델이 goat/heron 등으로 주더라도 의도한 그룹으로 강제
-                group_code = self._ENG_TO_GROUP.get(rep_eng, (g.get("group") or ""))
-
-                # ✅ 그룹 KO 라벨 우선 적용
-                display_ko = self._GROUP_LABEL_KO.get(group_code)
-
-                # 그룹 라벨이 없으면 멤버 KO를 합성(A/B)
-                if not display_ko:
-                    mapped = []
-                    for m, _p in members:
-                        key = self._norm_eng(m)
-                        mapped.append(self._to_kor(key) or m)
-                    mapped = list(dict.fromkeys(mapped))  # 중복 제거
-                    display_ko = "/".join(mapped) if mapped else (self._to_kor(rep_eng) or top_member_en)
-
-                # 보고서 저장용 animal_id는 탑 멤버 기준으로 매핑
-                a = self._find_animal(rep_eng, display_ko)
-
-                results.append({
-                    "group": group_code,          # 예: "deer"
-                    "label": display_ko,          # 예: "고라니/노루"
-                    "label_ko": display_ko,
-                    "prob": g.get("prob"),
-                    "members": members,           # 원본 멤버 그대로
-                    "rep_eng": rep_eng,           # 탑 멤버 EN
-                    "animal_id": a.id if a else None,
-                })
-
-            return Response({"mode": "grouped", "results": results})
-
-        topk = predict_topk(img, k=3)
-        best = topk[0]
-        rep_eng = self._norm_eng(best["label"])
-        label_ko = self._to_kor(rep_eng)
-        a = self._find_animal(rep_eng, label_ko)
-
-        return Response({
-            "mode": "single",
-            "label": best["label"],
-            "label_norm": rep_eng,
-            "label_ko": label_ko,
-            "prob": best["prob"],
-            "animal_id": a.id if a else None,
-            "topk": topk,
-        })
-def _norm_text(s: str) -> str:
-    return (s or '').strip().lower()
-
-@require_GET
-@permission_classes([AllowAny])
-def animal_resolve(request):
-    """
-    GET /api/animals/resolve/?q=<label>
-    반환: { "animal_id": <int>, "confidence": "exact|alias|startswith|contains|fallback", "matched": "<str>" }
-    """
-    label = _norm_text(request.GET.get('q', ''))
-    FALLBACK_UNKNOWN_ID = 31
-
-    if not label:
-        return JsonResponse({"animal_id": FALLBACK_UNKNOWN_ID, "confidence": "fallback", "matched": ""})
-
-    # 프로젝트 실데이터 기준: name_kor / name_eng 필드 사용
-    alias_map = {
-        # EN → KO 대표명(필요시 확장)
-        "goat": "고라니",
-        "roe deer": "노루",
-        "wild boar": "멧돼지",
-        "raccoon": "너구리",
-        "chipmunk": "청설모",
-        "squirrel": "다람쥐",
-        "asiatic black bear": "반달가슴곰",
-        "hare": "멧토끼",
-        "weasel": "족제비",
-        "heron": "왜가리",
-        "egret": "중대백로",
-        "dog": "개",
-        "cat": "고양이",
-    }
-
-    candidates = [label]
-    if label in alias_map:
-        candidates.append(_norm_text(alias_map[label]))
-
-    def query_any(terms, lookups):
-        qs = Animal.objects.all()
-        for term in terms:
-            q = Q()
-            for lk in lookups:
-                q |= Q(**{lk: term})
-            obj = qs.filter(q).first()
-            if obj:
-                return obj, term
-        return None, None
-
-    # 우선순위: exact → alias-exact → startswith → contains
-    exact_lookups = ["name_kor__iexact", "name_eng__iexact"]
-    starts_lookups = ["name_kor__istartswith", "name_eng__istartswith"]
-    contains_lookups = ["name_kor__icontains", "name_eng__icontains"]
-
-    obj, matched = query_any([candidates[0]], exact_lookups)
-    if obj:
-        return JsonResponse({"animal_id": obj.id, "confidence": "exact", "matched": matched})
-
-    if len(candidates) > 1:
-        obj, matched = query_any([candidates[1]], exact_lookups)
-        if obj:
-            return JsonResponse({"animal_id": obj.id, "confidence": "alias", "matched": matched})
-
-    obj, matched = query_any(candidates, starts_lookups)
-    if obj:
-        return JsonResponse({"animal_id": obj.id, "confidence": "startswith", "matched": matched})
-
-    obj, matched = query_any(candidates, contains_lookups)
-    if obj:
-        return JsonResponse({"animal_id": obj.id, "confidence": "contains", "matched": matched})
-
-    return JsonResponse({"animal_id": FALLBACK_UNKNOWN_ID, "confidence": "fallback", "matched": ""})
-
 # ---------- 무인증 신고 ----------
 class ReportNoAuthView(APIView):
     """
@@ -1448,17 +1241,29 @@ class NotificationViewSet(mixins.ListModelMixin,
                 return base.order_by('-created_at', '-id')
             return qs.filter(type='individual', user_id=user.id).order_by('-created_at', '-id')
 
+        if qtype in ('all', '') and is_admin(user):
+            return qs.order_by('-created_at', '-id')
+
         # 목록에는 type이 꼭 필요 (list에서 400 처리)
         return qs.none()
 
     def list(self, request, *args, **kwargs):
         qtype = (request.query_params.get('type') or '').strip().lower()
-        if qtype not in ('group', 'individual'):
-            return Response(
-                {'detail': "type=group 또는 type=individual 파라미터가 필요합니다."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        return super().list(request, *args, **kwargs)
+        user = request.user
+
+        # 1) 기존 동작 유지: group / individual 은 항상 허용
+        if qtype in ('group', 'individual'):
+            return super().list(request, *args, **kwargs)
+
+        # 2) ★ NEW: type이 비어 있는데 관리자라면 → 전체 목록
+        if qtype == '' and is_admin(user):
+            return super().list(request, *args, **kwargs)
+
+        # 3) 그 외에는 기존처럼 에러
+        return Response(
+            {'detail': "type=group 또는 type=individual 파라미터가 필요합니다."},
+            status=status.HTTP_400_BAD_REQUEST
+        )
 
     def perform_create(self, serializer):
         if not is_admin(self.request.user):
@@ -1585,7 +1390,11 @@ class StatisticViewSet(viewsets.ReadOnlyModelViewSet):
 @permission_classes([AllowAny])
 def animal_info(request):
     name = request.GET.get('name')
-    a = Animal.objects.filter(name_kor=name).order_by('id').first()
+    a = Animal.objects.filter(
+        Q(name_kor__iexact=name) |
+        Q(name_kor__icontains=name) |
+        Q(name_eng__icontains=name)
+    ).order_by('id').first()
     if not a:
         return Response({"message": "해당 동물 정보가 없습니다."}, status=404)
 

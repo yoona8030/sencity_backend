@@ -20,7 +20,7 @@ urlpatterns = [
 
     path('cctv/', include('cctv.urls')),
 
-    path("api/ai/", include("api.ai.urls")),
+    path("api/ai/", include("api.ai.urls", namespace="ai")),
 
 ]
 

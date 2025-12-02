@@ -1,358 +1,411 @@
-{% load static %}
-<!DOCTYPE html>
-<html lang="ko">
+{% extends "dashboard/base.html" %} {% load static %} {% block title %}설정{% endblock title %} {% block extra_head %}
+<link rel="stylesheet" href="{% static 'dashboard/css/settings.css' %}?v=2025-11-02" />
+{% endblock extra_head %} {% block content %}
+<div class="dashboard-body wrap page-settings">
+  <h1 class="section-title">설정</h1>
 
-<head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>관리자 페이지 | 설정</title>
-
-    <link rel="icon" href="{% static 'dashboard/images/favicon.ico' %}" sizes="any" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" />
-    <!-- 공통 -->
-    <link rel="stylesheet" href="{% static 'dashboard/css/dashboard.css' %}?v=fit-2025-09-19" />
-
-    <!-- 설정 전용 -->
-    <link rel="stylesheet" href="{% static 'dashboard/css/settings.css' %}?v=2025-09-19" />
-</head>
-
-<body class="page-settings">
-    <div class="container">
-        <!-- 사이드바 -->
-        <aside class="sidebar">
-            <div class="sidebar-brand">관리자 페이지</div>
-            <div class="sidebar-logo">
-                <img src="{% static 'dashboard/images/logo.png' %}" alt="SENCITY" />
-                <span>SENCITY</span>
+  <div class="cards">
+    <!-- 왼쪽 스택 -->
+    <section class="stack">
+      <!-- 일반 -->
+      <div class="card">
+        <h3>일반</h3>
+        <div class="grid2">
+          <div class="field">
+            <div class="label">서버 상태 배너 표시</div>
+            <div class="row">
+              <label class="switch">
+                <input type="checkbox" id="maintenance_mode" />
+                <span class="slider"></span>
+              </label>
+              <span class="hint">상단에 서버 위치/상태 안내 배너를 노출합니다.</span>
             </div>
-            <a href="{% url 'admin:index' %}" class="sidebar-link">
-                <i class="fa-solid fa-arrow-up-right-from-square"></i> 사이트 바로가기
-            </a>
-            <hr />
-            <nav class="sidebar-menu">
-                <div class="menu-group">사이트 관리</div>
-                <a href="{% url 'dashboard:home' %}" class="menu-item">
-                    <i class="fa-solid fa-th-large"></i> 대시보드
-                </a>
-                <a href="{% url 'dashboard:cctv' %}" class="menu-item">
-                    <i class="fa-solid fa-camera"></i> CCTV 관리
-                </a>
-                <a href="{% url 'dashboard:reports' %}" class="menu-item">
-                    <i class="fa-solid fa-tv"></i> 신고 처리 및 관리
-                </a>
-                <a href="{% url 'dashboard:settings' %}" class="menu-item active">
-                    <i class="fa-solid fa-gear"></i> 설정
-                </a>
-                <a href="{% url 'dashboard:users' %}" class="menu-item">
-                    <i class="fa-solid fa-user"></i> 사용자 관리
-                </a>
+          </div>
 
-                <div class="menu-group">콘텐츠 및 통계</div>
-                <a href="{% url 'dashboard:analytics' %}" class="menu-item">
-                    <i class="fa-solid fa-chart-column"></i> 데이터 분석 및 통계
-                </a>
-                <a href="{% url 'dashboard:contents' %}" class="menu-item">
-                    <i class="fa-solid fa-file-lines"></i> 콘텐츠 관리
-                </a>
-                <a href="{% url 'dashboard:notices' %}" class="menu-item">
-                    <i class="fa-solid fa-bell"></i> 공지 설정
-                </a>
-            </nav>
-        </aside>
+          <div class="field">
+            <label class="label" for="default_region">기본 지역</label>
+            <input id="default_region" class="input" placeholder="예: 연천군(예시)" />
+            <div class="hint">검색/통계 초기 진입 시 기본 지역으로 사용.</div>
+          </div>
 
-        <!-- 본문 -->
-        <main class="main">
-            <div class="main-content">
-                <div class="dashboard-body wrap">
-                    <h1 class="section-title">설정</h1>
-
-                    <div class="cards">
-                        <!-- 왼쪽 -->
-                        <section class="stack">
-                            <!-- 일반 -->
-                            <div class="card">
-                                <h3>일반</h3>
-                                <div class="grid2">
-                                    <div class="field">
-                                        <div class="label">서버 상태 배너 표시</div>
-                                        <div class="row">
-                                            <label class="switch">
-                          <input type="checkbox" id="maintenance_mode" />
-                          <span class="slider"></span>
-                        </label>
-                                            <span class="hint">상단에 서버 위치/상태 안내 배너를 노출합니다.</span>
-                                        </div>
-                                    </div>
-
-                                    <div class="field">
-                                        <label class="label" for="default_region">기본 지역</label>
-                                        <input id="default_region" class="input" placeholder="예: 연천군(예시)" />
-                                        <div class="hint">검색/통계 초기 진입 시 기본 지역으로 사용.</div>
-                                    </div>
-
-                                    <div class="field">
-                                        <label class="label" for="auto_refresh_min">데이터 자동 업데이트 주기</label>
-                                        <div class="row">
-                                            <input id="auto_refresh_min" type="number" min="1" step="1" class="number grow" />
-                                            <span class="hint">분</span>
-                                        </div>
-                                        <div class="hint">최소 1분 이상 권장.</div>
-                                    </div>
-
-                                    <div class="field">
-                                        <label class="label" for="maintenance_message">유지보수 안내 문구</label>
-                                        <input id="maintenance_message" class="input" placeholder="예: 02:00~03:00 점검" />
-                                    </div>
-                                </div>
-                                <div class="actions">
-                                    <button class="btn" id="btn_reset_general">되돌리기</button>
-                                    <button class="btn primary" id="btn_save_general">저장</button>
-                                </div>
-                            </div>
-
-                            <!-- 리스트 기본값 -->
-                            <div class="card">
-                                <h3>리스트 기본값</h3>
-                                <div class="grid2">
-                                    <div class="field">
-                                        <label class="label" for="page_size">페이지 크기</label>
-                                        <select id="page_size" class="select">
-                        <option value="10">10</option>
-                        <option value="20" selected>20</option>
-                        <option value="50">50</option>
-                      </select>
-                                    </div>
-
-                                    <div class="field">
-                                        <label class="label" for="default_period">기본 기간</label>
-                                        <select id="default_period" class="select">
-                        <option value="all" selected>전체</option>
-                        <option value="7d">최근 7일</option>
-                        <option value="30d">최근 30일</option>
-                      </select>
-                                    </div>
-
-                                    <div class="field">
-                                        <label class="label" for="default_sort">기본 정렬</label>
-                                        <select id="default_sort" class="select">
-                        <option value="-report_date" selected>최신순</option>
-                        <option value="report_date">오래된순</option>
-                      </select>
-                                    </div>
-
-                                    <div class="field">
-                                        <label class="label" for="unresolved_statuses">미해결 상태(쉼표로 구분)</label>
-                                        <input id="unresolved_statuses" class="input" placeholder="접수,처리중,미처리,대기" />
-                                    </div>
-                                </div>
-                                <div class="actions">
-                                    <button class="btn" id="btn_reset_list">되돌리기</button>
-                                    <button class="btn primary" id="btn_save_list">저장</button>
-                                </div>
-                            </div>
-                        </section>
-
-                        <!-- 오른쪽 -->
-                        <aside class="stack">
-                            <div class="card">
-                                <h3>알림</h3>
-                                <div class="field row">
-                                    <label class="row" style="gap: 10px">
-                      <input type="checkbox" id="notify_sound" />
-                      새 신고 알림 소리
-                    </label>
-                                </div>
-                                <div class="field row">
-                                    <label class="row" style="gap: 10px">
-                      <input type="checkbox" id="notify_desktop" />
-                      데스크톱 알림 사용
-                    </label>
-                                </div>
-                                <div class="field">
-                                    <label class="label">조용한 시간대</label>
-                                    <div class="row">
-                                        <input id="quiet_start" type="time" class="input grow" />
-                                        <span>~</span>
-                                        <input id="quiet_end" type="time" class="input grow" />
-                                    </div>
-                                    <div class="hint">해당 시간에는 상태 알림을 보내지 않습니다.</div>
-                                </div>
-                                <div class="actions">
-                                    <button class="btn" id="btn_reset_notify">되돌리기</button>
-                                    <button class="btn primary" id="btn_save_notify">저장</button>
-                                </div>
-                            </div>
-
-                            <div class="card">
-                                <h3>표시 옵션</h3>
-                                <div class="field">
-                                    <label class="label" for="date_format">날짜 형식</label>
-                                    <select id="date_format" class="select">
-                      <option value="YYYY-MM-DD HH:mm" selected>YYYY-MM-DD HH:mm</option>
-                      <option value="YYYY.MM.DD HH:mm">YYYY.MM.DD HH:mm</option>
-                    </select>
-                                </div>
-                                <div class="field row">
-                                    <label class="row" style="gap: 10px">
-                      <input type="checkbox" id="mask_reporter" />
-                      신고자 이름 마스킹
-                    </label>
-                                </div>
-                                <div class="actions">
-                                    <button class="btn" id="btn_reset_view">되돌리기</button>
-                                    <button class="btn primary" id="btn_save_view">저장</button>
-                                </div>
-                            </div>
-
-                            <div class="card">
-                                <h3>지도</h3>
-                                <div class="field">
-                                    <label class="label" for="map_provider">지도 제공자</label>
-                                    <select id="map_provider" class="select">
-                      <option value="kakao">Kakao</option>
-                      <option value="naver">Naver</option>
-                      <option value="google">Google</option>
-                    </select>
-                                </div>
-                                <div class="field">
-                                    <label class="label" for="map_api_key">API Key</label>
-                                    <input id="map_api_key" class="input" placeholder="키를 입력하세요" />
-                                </div>
-                                <div class="actions">
-                                    <button class="btn" id="btn_reset_map">되돌리기</button>
-                                    <button class="btn primary" id="btn_save_map">저장</button>
-                                </div>
-                            </div>
-                        </aside>
-                    </div>
-                </div>
+          <div class="field">
+            <label class="label" for="auto_refresh_min">데이터 자동 업데이트 주기</label>
+            <div class="row">
+              <input id="auto_refresh_min" type="number" min="1" step="1" class="number grow" />
+              <span class="hint">분</span>
             </div>
-        </main>
-    </div>
+            <div class="hint">최소 1분 이상 권장.</div>
+          </div>
 
-    <script>
-        /* ===== API ===== */
-        const API = '/dashboard/api/settings/';
+          <div class="field">
+            <label class="label" for="maintenance_message">유지보수 안내 문구</label>
+            <input id="maintenance_message" class="input" placeholder="예: 02:00~03:00 점검" />
+          </div>
+        </div>
+        <div class="actions">
+          <button class="btn" id="btn_reset_general">되돌리기</button>
+          <button class="btn primary" id="btn_save_general">저장</button>
+        </div>
+      </div>
 
-        // CSRF from cookie
-        function getCookie(name) {
-            const m = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
-            return m ? m.pop() : '';
-        }
-        const CSRF = getCookie('csrftoken');
+      <!-- 리스트 기본값 -->
+      <div class="card">
+        <h3>리스트 기본값</h3>
+        <div class="grid2">
+          <div class="field">
+            <label class="label" for="page_size">페이지 크기</label>
+            <select id="page_size" class="select">
+              <option value="10">10</option>
+              <option value="20" selected>20</option>
+              <option value="50">50</option>
+            </select>
+          </div>
 
-        // helpers
-        const val = (id) => document.getElementById(id).value;
-        const set = (id, v) => {
-            document.getElementById(id).value = v != null ? v : '';
-        }; // <-- FIX
-        const checked = (id) => document.getElementById(id).checked;
-        const setChecked = (id, v) => {
-            document.getElementById(id).checked = !!v;
-        };
+          <div class="field">
+            <label class="label" for="default_period">기본 기간</label>
+            <select id="default_period" class="select">
+              <option value="all" selected>전체</option>
+              <option value="7d">최근 7일</option>
+              <option value="30d">최근 30일</option>
+            </select>
+          </div>
 
-        async function loadSettings() {
-            const r = await fetch(API, {
-                credentials: 'same-origin',
-            });
-            if (!r.ok) {
-                alert('설정을 불러오지 못했습니다.');
-                return;
-            }
-            const s = await r.json();
+          <div class="field">
+            <label class="label" for="default_sort">기본 정렬</label>
+            <select id="default_sort" class="select">
+              <option value="-report_date" selected>최신순</option>
+              <option value="report_date">오래된순</option>
+            </select>
+          </div>
 
-            // 일반
-            setChecked('maintenance_mode', s.maintenance_mode);
-            set('maintenance_message', s.maintenance_message || '');
-            set('default_region', s.default_region || '');
-            set('auto_refresh_min', s.auto_refresh_min != null ? s.auto_refresh_min : 10); // <-- FIX
+          <div class="field">
+            <label class="label" for="unresolved_statuses">미해결 상태(쉼표로 구분)</label>
+            <input id="unresolved_statuses" class="input" placeholder="접수,처리중,미처리,대기" />
+          </div>
+        </div>
+        <div class="actions">
+          <button class="btn" id="btn_reset_list">되돌리기</button>
+          <button class="btn primary" id="btn_save_list">저장</button>
+        </div>
+      </div>
 
-            // 리스트 기본
-            set('page_size', String(s.page_size != null ? s.page_size : '20')); // <-- FIX
-            set('default_period', s.default_period != null ? s.default_period : 'all'); // <-- FIX
-            set('default_sort', s.default_sort != null ? s.default_sort : '-report_date'); // <-- FIX
-            set('unresolved_statuses', (s.unresolved_statuses || []).join(','));
+      <!-- 서버/로그/백업 -->
+      <div class="card">
+        <h3>서버 · 로그 · 백업</h3>
+        <div class="grid2">
+          <div class="field">
+            <label class="label" for="server_ping_interval_sec">서버 핑 체크 간격(초)</label>
+            <input id="server_ping_interval_sec" type="number" min="1" step="1" class="number" />
+            <div class="hint">대시보드가 백엔드 응답을 몇 초마다 확인할지.</div>
+          </div>
 
-            // 알림
-            setChecked('notify_sound', !!s.notify_sound);
-            setChecked('notify_desktop', !!s.notify_desktop);
-            set('quiet_start', s.quiet_hours_start || '');
-            set('quiet_end', s.quiet_hours_end || '');
+          <div class="field">
+            <label class="label" for="log_retention_days">로그 보관 기간</label>
+            <select id="log_retention_days" class="select">
+              <option value="7">7일</option>
+              <option value="30">30일</option>
+              <option value="90">90일</option>
+            </select>
+            <div class="hint">애플리케이션/에러 로그 삭제 주기.</div>
+          </div>
 
-            // 표시
-            set('date_format', s.date_format || 'YYYY-MM-DD HH:mm');
-            setChecked('mask_reporter', !!s.mask_reporter);
+          <div class="field">
+            <label class="label" for="db_backup_interval_hours">DB 백업 주기(시간)</label>
+            <input id="db_backup_interval_hours" type="number" min="1" step="1" class="number" />
+          </div>
 
-            // 지도
-            set('map_provider', s.map_provider || 'kakao');
-            set('map_api_key', s.map_api_key || '');
-        }
+          <div class="field">
+            <label class="label" for="db_backup_dir">백업 저장 경로</label>
+            <input id="db_backup_dir" class="input" placeholder="예: backups 또는 D:\backups" />
+            <div class="hint">프로젝트 루트 기준 상대경로/절대경로 모두 허용.</div>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="btn" id="btn_reset_server">되돌리기</button>
+          <button class="btn primary" id="btn_save_server">저장</button>
+        </div>
+      </div>
+    </section>
 
-        async function save(payload) {
-            const r = await fetch(API, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': CSRF,
-                },
-                credentials: 'same-origin',
-                body: JSON.stringify(payload),
-            });
-            if (!r.ok) {
-                alert('저장 실패');
-                return;
-            }
-            await loadSettings();
-            alert('저장되었습니다.');
-        }
+    <!-- 오른쪽 스택 -->
+    <aside class="stack">
+      <!-- 알림 -->
+      <div class="card">
+        <h3>알림</h3>
+        <div class="field row">
+          <label class="row" style="gap: 10px">
+            <input type="checkbox" id="notify_sound" />
+            새 신고 알림 소리
+          </label>
+        </div>
+        <div class="field row">
+          <label class="row" style="gap: 10px">
+            <input type="checkbox" id="notify_desktop" />
+            데스크톱 알림 사용
+          </label>
+        </div>
+        <div class="field">
+          <label class="label">조용한 시간대</label>
+          <div class="row">
+            <input id="quiet_start" type="time" class="input grow" />
+            <span>~</span>
+            <input id="quiet_end" type="time" class="input grow" />
+          </div>
+          <div class="hint">해당 시간에는 상태 알림을 보내지 않습니다.</div>
+        </div>
+        <div class="actions">
+          <button class="btn" id="btn_reset_notify">되돌리기</button>
+          <button class="btn primary" id="btn_save_notify">저장</button>
+        </div>
+      </div>
 
-        // 저장 핸들러
-        document.getElementById('btn_save_general').onclick = () =>
-            save({
-                maintenance_mode: checked('maintenance_mode'),
-                maintenance_message: val('maintenance_message'),
-                default_region: val('default_region'),
-                auto_refresh_min: Number(val('auto_refresh_min') || 10),
-            });
+      <!-- 표시 옵션 -->
+      <div class="card">
+        <h3>표시 옵션</h3>
+        <div class="field">
+          <label class="label" for="date_format">날짜 형식</label>
+          <select id="date_format" class="select">
+            <option value="YYYY-MM-DD HH:mm" selected>YYYY-MM-DD HH:mm</option>
+            <option value="YYYY.MM.DD HH:mm">YYYY.MM.DD HH:mm</option>
+          </select>
+        </div>
+        <div class="field row">
+          <label class="row" style="gap: 10px">
+            <input type="checkbox" id="mask_reporter" />
+            신고자 이름 마스킹
+          </label>
+        </div>
+        <div class="actions">
+          <button class="btn" id="btn_reset_view">되돌리기</button>
+          <button class="btn primary" id="btn_save_view">저장</button>
+        </div>
+      </div>
 
-        document.getElementById('btn_save_list').onclick = () =>
-            save({
-                page_size: parseInt(val('page_size'), 10),
-                default_period: val('default_period'),
-                default_sort: val('default_sort'),
-                unresolved_statuses: (val('unresolved_statuses') || '')
-                    .split(',')
-                    .map((s) => s.trim())
-                    .filter(Boolean),
-            });
+      <!-- 통계/자동 규칙/삭제 정책 -->
+      <div class="card">
+        <h3>통계 · 자동 규칙 · 삭제 정책</h3>
+        <div class="field">
+          <label class="label" for="stats_refresh_interval_min">통계 캐시 리프레시 주기(분)</label>
+          <input id="stats_refresh_interval_min" type="number" min="1" step="1" class="number" />
+        </div>
 
-        document.getElementById('btn_save_notify').onclick = () =>
-            save({
-                notify_sound: checked('notify_sound'),
-                notify_desktop: checked('notify_desktop'),
-                quiet_hours_start: val('quiet_start') || null,
-                quiet_hours_end: val('quiet_end') || null,
-            });
+        <div class="grid2">
+          <div class="field">
+            <label class="label" for="auto_stale_days_to_pending">미처리 경과 일수</label>
+            <input id="auto_stale_days_to_pending" type="number" min="1" step="1" class="number" />
+            <div class="hint">해당 일수 이상 경과 시 아래 상태로 자동 변경.</div>
+          </div>
+          <div class="field">
+            <label class="label" for="auto_stale_target_status">변경할 상태</label>
+            <select id="auto_stale_target_status" class="select">
+              <option value="대기">대기</option>
+              <option value="처리중">처리중</option>
+              <option value="보류">보류</option>
+            </select>
+          </div>
+        </div>
 
-        document.getElementById('btn_save_view').onclick = () =>
-            save({
-                date_format: val('date_format'),
-                mask_reporter: checked('mask_reporter'),
-            });
+        <div class="field">
+          <label class="label" for="completed_report_retention_days">완료 신고 보존 기간(일)</label>
+          <input id="completed_report_retention_days" type="number" min="1" step="1" class="number" />
+        </div>
 
-        document.getElementById('btn_save_map').onclick = () =>
-            save({
-                map_provider: val('map_provider'),
-                map_api_key: val('map_api_key'),
-            });
+        <div class="actions">
+          <button class="btn" id="btn_reset_rule">되돌리기</button>
+          <button class="btn primary" id="btn_save_rule">저장</button>
+        </div>
+      </div>
 
-        // 되돌리기
-        ['btn_reset_general', 'btn_reset_list', 'btn_reset_notify', 'btn_reset_view', 'btn_reset_map'].forEach(
-            (id) => (document.getElementById(id).onclick = loadSettings)
-        );
+      <!-- 지도 -->
+      <div class="card">
+        <h3>지도</h3>
+        <div class="field">
+          <label class="label" for="map_provider">지도 제공자</label>
+          <select id="map_provider" class="select">
+            <option value="kakao">Kakao</option>
+            <option value="naver">Naver</option>
+            <option value="google">Google</option>
+          </select>
+        </div>
+        <div class="field">
+          <label class="label" for="map_api_key">API Key</label>
+          <input id="map_api_key" class="input" placeholder="키를 입력하세요" />
+        </div>
+        <div class="actions">
+          <button class="btn" id="btn_reset_map">되돌리기</button>
+          <button class="btn primary" id="btn_save_map">저장</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+{% endblock content %} {% block extra_js %}
+<script>
+  /* ===== 상수 & 공통 유틸 ===== */
+  const API = '/dashboard/api/settings/';
 
-        document.addEventListener('DOMContentLoaded', loadSettings);
-    </script>
-</body>
+  function getCookie(name) {
+    const m = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+    return m ? m.pop() : '';
+  }
+  const CSRF = getCookie('csrftoken');
 
-</html>
+  /* ===== 페이지 로직 ===== */
+  document.addEventListener('DOMContentLoaded', function () {
+    // 헬퍼 (DOMContentLoaded 이후에 안전)
+    const el = (id) => document.getElementById(id);
+    const val = (id) => el(id).value;
+    const set = (id, v) => {
+      el(id).value = v != null ? String(v) : '';
+    };
+    const checked = (id) => el(id).checked;
+    const setChecked = (id, v) => {
+      el(id).checked = !!v;
+    };
+
+    async function loadSettings() {
+      const r = await fetch(API, { credentials: 'same-origin' });
+      if (!r.ok) {
+        alert('설정을 불러오지 못했습니다.');
+        return;
+      }
+      const s = await r.json();
+
+      // 일반
+      setChecked('maintenance_mode', s.maintenance_mode);
+      set('maintenance_message', s.maintenance_message || '');
+      set('default_region', s.default_region || '');
+      set('auto_refresh_min', s.auto_refresh_min != null ? s.auto_refresh_min : 10);
+
+      // 리스트 기본
+      set('page_size', s.page_size != null ? s.page_size : 20);
+      set('default_period', s.default_period != null ? s.default_period : 'all');
+      set('default_sort', s.default_sort != null ? s.default_sort : '-report_date');
+      set('unresolved_statuses', (s.unresolved_statuses || []).join(','));
+
+      // 서버/로그/백업
+      set('server_ping_interval_sec', s.server_ping_interval_sec != null ? s.server_ping_interval_sec : 10);
+      set('log_retention_days', s.log_retention_days != null ? s.log_retention_days : 30);
+      set('db_backup_interval_hours', s.db_backup_interval_hours != null ? s.db_backup_interval_hours : 24);
+      set('db_backup_dir', s.db_backup_dir || 'backups');
+
+      // 알림
+      setChecked('notify_sound', !!s.notify_sound);
+      setChecked('notify_desktop', !!s.notify_desktop);
+      set('quiet_start', s.quiet_hours_start || '');
+      set('quiet_end', s.quiet_hours_end || '');
+
+      // 표시
+      set('date_format', s.date_format || 'YYYY-MM-DD HH:mm');
+      setChecked('mask_reporter', !!s.mask_reporter);
+
+      // 통계/자동 규칙/삭제 정책
+      set('stats_refresh_interval_min', s.stats_refresh_interval_min != null ? s.stats_refresh_interval_min : 10);
+      set('auto_stale_days_to_pending', s.auto_stale_days_to_pending != null ? s.auto_stale_days_to_pending : 3);
+      set('auto_stale_target_status', s.auto_stale_target_status || '대기');
+      set('completed_report_retention_days', s.completed_report_retention_days != null ? s.completed_report_retention_days : 180);
+
+      // 지도
+      set('map_provider', s.map_provider || 'kakao');
+      set('map_api_key', s.map_api_key || '');
+    }
+
+    async function save(payload) {
+      const r = await fetch(API, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF },
+        credentials: 'same-origin',
+        body: JSON.stringify(payload),
+      });
+      if (!r.ok) {
+        alert('저장 실패');
+        return;
+      }
+      await loadSettings();
+      alert('저장되었습니다.');
+    }
+
+    // 저장 핸들러
+    el('btn_save_general')?.addEventListener('click', () =>
+      save({
+        maintenance_mode: checked('maintenance_mode'),
+        maintenance_message: val('maintenance_message'),
+        default_region: val('default_region'),
+        auto_refresh_min: Number(val('auto_refresh_min') || 10),
+      })
+    );
+
+    el('btn_save_list')?.addEventListener('click', () =>
+      save({
+        page_size: parseInt(val('page_size'), 10),
+        default_period: val('default_period'),
+        default_sort: val('default_sort'),
+        unresolved_statuses: (val('unresolved_statuses') || '')
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean),
+      })
+    );
+
+    // 서버/로그/백업
+    el('btn_save_server')?.addEventListener('click', () =>
+      save({
+        server_ping_interval_sec: Math.max(1, parseInt(val('server_ping_interval_sec') || '10', 10)),
+        log_retention_days: parseInt(val('log_retention_days') || '30', 10),
+        db_backup_interval_hours: Math.max(1, parseInt(val('db_backup_interval_hours') || '24', 10)),
+        db_backup_dir: val('db_backup_dir') || 'backups',
+      })
+    );
+
+    // 알림
+    el('btn_save_notify')?.addEventListener('click', () =>
+      save({
+        notify_sound: checked('notify_sound'),
+        notify_desktop: checked('notify_desktop'),
+        quiet_hours_start: val('quiet_start') || null,
+        quiet_hours_end: val('quiet_end') || null,
+      })
+    );
+
+    // 표시
+    el('btn_save_view')?.addEventListener('click', () =>
+      save({
+        date_format: val('date_format'),
+        mask_reporter: checked('mask_reporter'),
+      })
+    );
+
+    // 통계/자동 규칙/삭제 정책
+    el('btn_save_rule')?.addEventListener('click', () =>
+      save({
+        stats_refresh_interval_min: Math.max(1, parseInt(val('stats_refresh_interval_min') || '10', 10)),
+        auto_stale_days_to_pending: Math.max(1, parseInt(val('auto_stale_days_to_pending') || '3', 10)),
+        auto_stale_target_status: val('auto_stale_target_status') || '대기',
+        completed_report_retention_days: Math.max(1, parseInt(val('completed_report_retention_days') || '180', 10)),
+      })
+    );
+
+    // 되돌리기 묶음
+    [
+      'btn_reset_general',
+      'btn_reset_list',
+      'btn_reset_server',
+      'btn_reset_notify',
+      'btn_reset_view',
+      'btn_reset_rule',
+      'btn_reset_map',
+    ].forEach((id) => el(id)?.addEventListener('click', loadSettings));
+
+    // 지도
+    el('btn_save_map')?.addEventListener('click', () =>
+      save({
+        map_provider: val('map_provider'),
+        map_api_key: val('map_api_key'),
+      })
+    );
+
+    // 최초 로드
+    loadSettings();
+  });
+</script>
+{% endblock extra_js %}

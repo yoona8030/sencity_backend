@@ -81,6 +81,12 @@
     font-size: 12px;
 }
 
+.subhint {
+    /* ★ 추가: 더 작은 보조 힌트 */
+    color: #9ca3af;
+    font-size: 11px;
+}
+
 
 /* 인풋류 */
 

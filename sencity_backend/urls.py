@@ -10,6 +10,8 @@ urlpatterns = [
     # API
     path('api/', include('api.urls')),
 
+    path("api/ai/", include("api.ai.urls")),
+
     # Dashboard (namespace 사용 시 dashboard/urls.py에 app_name='dashboard' 필요)
     path('dashboard/', include('dashboard.urls', namespace='dashboard')),
 

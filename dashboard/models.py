@@ -1,8 +1,9 @@
-from django.db import models
-from django.conf import settings
-from django.utils import timezone
 from datetime import timedelta
-
+from django.db import models
+from django.utils import timezone
+from django.conf import settings
+from django.core.validators import MinValueValidator
+from django.contrib.auth import get_user_model
 
 HEARTBEAT_TIMEOUT_SEC = 20  # 하트비트 기준(필요 시 조정)
 
@@ -73,7 +74,6 @@ class Animal(models.Model):
     def __str__(self):
         return self.name
 
-
 class Report(models.Model):
     # 새 필드
     title        = models.CharField("신고 제목", max_length=200, blank=True)
@@ -112,11 +112,6 @@ class Report(models.Model):
         label = self.animal.name if self.animal else (self.animal_name or "미상")
         return f"[{label}] {self.title or ''}".strip()
 
-    # 💡 대시보드 표시에 편한 통합 라벨
-    @property
-    def animal_label(self) -> str:
-        return self.animal.name if self.animal else (self.animal_name or "미상")
-
 
 class Prediction(models.Model):
     device     = models.ForeignKey(
@@ -144,7 +139,7 @@ class Prediction(models.Model):
 class DashboardSetting(models.Model):
     """
     대시보드 전역 설정 (singleton 성격).
-    아래 to_dict/update_from_dict에서 참조하는 필드들을 실제로 정의합니다.  # ★핵심 수정
+    아래 to_dict/update_from_dict에서 참조하는 필드들을 실제로 정의합니다.
     """
     PERIOD = [("all","전체"),("7d","최근7일"),("30d","최근30일")]
     SORT   = [("newest","최신순"),("oldest","오래된순")]
@@ -154,7 +149,7 @@ class DashboardSetting(models.Model):
     default_period = models.CharField(max_length=10, choices=PERIOD, default="all")
     default_sort   = models.CharField(max_length=10, choices=SORT,   default="newest")
 
-    # ★추가: 리스트 페이지 사이즈/표시 관련
+    # 리스트 페이지 사이즈/표시 관련
     page_size      = models.PositiveSmallIntegerField(default=10)  # to_dict에서 사용
 
     # 미해결/지연
@@ -166,7 +161,7 @@ class DashboardSetting(models.Model):
     quiet_hours_start    = models.TimeField(null=True, blank=True)
     quiet_hours_end      = models.TimeField(null=True, blank=True)
 
-    # ★추가: 사용자 알림 선호 (to_dict에서 사용)
+    # 사용자 알림 선호 (to_dict에서 사용)
     notify_sound   = models.BooleanField(default=True)
     notify_desktop = models.BooleanField(default=True)
 
@@ -178,11 +173,62 @@ class DashboardSetting(models.Model):
     map_provider         = models.CharField(max_length=10, choices=MAP, default="kakao")
     map_api_key          = models.CharField(max_length=255, blank=True, default="")
 
-    # ★추가: 날짜 포맷, 개인정보 마스킹 (to_dict에서 사용)
+    # 날짜 포맷, 개인정보 마스킹 (to_dict에서 사용)
     date_format    = models.CharField(max_length=32, default="%Y-%m-%d %H:%M")
     mask_reporter  = models.BooleanField(default=False)
 
-    updated_at           = models.DateTimeField(auto_now=True)
+    # ====================== 여기부터 신규 6개 항목 ======================
+    # 1) 서버 상태 모니터링 주기
+    server_ping_interval_sec = models.PositiveIntegerField(
+        default=10, validators=[MinValueValidator(1)],
+        help_text="대시보드-백엔드 헬스체크 주기(초)"
+    )
+
+    # 2) 로그 보관 기간
+    LOG_RETENTION_CHOICES = (
+        (7, "7일"), (30, "30일"), (90, "90일"),
+    )
+    log_retention_days = models.IntegerField(
+        choices=LOG_RETENTION_CHOICES, default=30,
+        help_text="애플리케이션/에러 로그 보관 기간(일)"
+    )
+
+    # 3) 자동 백업 설정
+    db_backup_interval_hours = models.PositiveIntegerField(
+        default=24, validators=[MinValueValidator(1)],
+        help_text="DB 백업 주기(시간)"
+    )
+    db_backup_dir = models.CharField(
+        max_length=255, default="backups",
+        help_text="DB 백업 저장 경로(프로젝트 루트 기준/절대경로 허용)"
+    )
+
+    # 4) 자동 상태 변경 규칙
+    auto_stale_days_to_pending = models.PositiveIntegerField(
+        default=3, validators=[MinValueValidator(1)],
+        help_text="미처리 신고가 이 기간(일) 이상 경과하면 지정 상태로 변경"
+    )
+    AUTO_TO_STATUS_CHOICES = (
+        ("대기", "대기"), ("처리중", "처리중"), ("보류", "보류"),
+    )
+    auto_stale_target_status = models.CharField(
+        max_length=20, choices=AUTO_TO_STATUS_CHOICES, default="대기"
+    )
+
+    # 5) 자동 통계 업데이트 주기
+    stats_refresh_interval_min = models.PositiveIntegerField(
+        default=10, validators=[MinValueValidator(1)],
+        help_text="통계 캐시 리프레시 주기(분)"
+    )
+
+    # 6) 신고 삭제 정책(완료 후 보존 기간)
+    completed_report_retention_days = models.PositiveIntegerField(
+        default=180, validators=[MinValueValidator(1)],
+        help_text="완료된 신고 보존 기간(일)"
+    )
+    # ===============================================================
+
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         verbose_name = "대시보드 설정"
@@ -192,7 +238,7 @@ class DashboardSetting(models.Model):
         return "DashboardSetting"
 
     def to_dict(self):
-        # ★수정: 실제 존재하는 필드만 직렬화
+        # 실제 존재하는 필드만 직렬화 (프런트에서 바로 쓰는 값 위주)
         return {
             "page_size": self.page_size,
             "default_period": self.default_period,
@@ -201,12 +247,20 @@ class DashboardSetting(models.Model):
             "notify_desktop": self.notify_desktop,
             "date_format": self.date_format,
             "mask_reporter": self.mask_reporter,
+            "server_ping_interval_sec": self.server_ping_interval_sec,
+            "stats_refresh_interval_min": self.stats_refresh_interval_min,
         }
 
     def update_from_dict(self, data: dict):
-        # ★수정: 동일 키만 반영
-        for k in ["page_size","default_period","default_sort","notify_sound",
-                  "notify_desktop","date_format","mask_reporter"]:
+        # 동일 키만 반영 (프런트 저장 API 사용 시 안전)
+        for k in [
+            "page_size","default_period","default_sort","notify_sound",
+            "notify_desktop","date_format","mask_reporter",
+            "server_ping_interval_sec","stats_refresh_interval_min",
+            "log_retention_days","db_backup_interval_hours","db_backup_dir",
+            "auto_stale_days_to_pending","auto_stale_target_status",
+            "completed_report_retention_days",
+        ]:
             if k in data:
                 setattr(self, k, data[k])
 
@@ -220,7 +274,21 @@ class DashboardSetting(models.Model):
             unresolved_statuses=["접수","처리중","미처리","대기"],
             aging_threshold_days=3,
         )
+class LoginLog(models.Model):
+    user       = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="login_logs")
+    ip         = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.CharField(max_length=255, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        ordering = ["-created_at"]
+        indexes  = [
+            models.Index(fields=["user", "-created_at"]),
+            models.Index(fields=["-created_at"]),
+        ]
+
+    def __str__(self):
+        return f"{self.user_id} @ {self.ip} ({self.created_at:%Y-%m-%d %H:%M})"
 
 class Notification(models.Model):
     TYPE_CHOICES = [

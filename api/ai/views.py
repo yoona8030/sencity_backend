@@ -1,7 +1,11 @@
 # api/ai/views.py
 from __future__ import annotations
-import base64
-from typing import Any, Dict, Optional
+
+import os
+import re
+import tempfile
+import threading
+from typing import Tuple
 
 from django.conf import settings
 from django.utils.decorators import method_decorator
@@ -9,220 +13,240 @@ from django.views.decorators.csrf import csrf_exempt
 
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from rest_framework.permissions import AllowAny
 from rest_framework import status
-from rest_framework.decorators import api_view, authentication_classes, permission_classes
-from django.http import JsonResponse
 
-from .utils import (
-    auth_ok, should_fire, record_fire,
-    normalize_label, map_to_display_label,
-    resolve_device, resolve_coords,
-    resolve_animal_fk, resolve_user_for_ai,
-    create_report_and_broadcast,
+# EfficientNet 추론 코드 (수정하지 말 것)
+from . import classifier_model_inference as cmi
+# YOLOv5s 유틸
+from .yolo_utils import yolo_predict_image_file, yolo_predict_file_obj
+
+
+# -------------------------------------------------
+# 전역 모델 싱글톤 (EfficientNet 분류기)
+# -------------------------------------------------
+_MODEL = None
+_CLASS_NAMES: list[str] | None = None
+_MODEL_LOCK = threading.Lock()
+
+# 모델 파일 위치 (sencity_backend/efficientnet_models 폴더)
+MODEL_PATH = os.path.join(
+    settings.BASE_DIR,
+    "efficientnet_models",
+    "efficientnet_classifier_model.pth",
 )
 
-# predictor는 있으면 사용, 없으면 스킵
-try:
-    from .predictor import predictor  # Optional
-except Exception:
-    predictor = None
+
+def get_model() -> Tuple[object, list[str]]:
+    """
+    EfficientNet 모델을 1번만 로드하여 캐싱.
+    classifier_model_inference.load_model() 만 사용한다.
+    """
+    global _MODEL, _CLASS_NAMES
+
+    with _MODEL_LOCK:
+        if _MODEL is not None and _CLASS_NAMES is not None:
+            return _MODEL, _CLASS_NAMES
+
+        if not os.path.exists(MODEL_PATH):
+            raise FileNotFoundError(f"모델 파일을 찾을 수 없습니다: {MODEL_PATH}")
+
+        model, class_names = cmi.load_model(MODEL_PATH)
+        _MODEL = model
+        _CLASS_NAMES = list(class_names)
+        return _MODEL, _CLASS_NAMES
 
 
+def _normalize_label(raw: str) -> str:
+    """
+    '00_Goat', '07_Haron' 같은 체크포인트 라벨을
+    프론트 aliasToKor 매핑에 쓰기 좋은 형태로 정규화한다.
+
+    예:
+      '00_Goat'        -> 'Goat'
+      '01_Wild boar'   -> 'Wild boar'
+      '07_Haron'       -> 'Heron'   # 오타 보정
+    """
+    if not raw:
+        return raw
+
+    label = str(raw)
+
+    # 패턴 1: "00_Goat" -> "Goat"
+    if "_" in label:
+        left, right = label.split("_", 1)
+        if left.isdigit():
+            label = right
+
+    # 패턴 2: 혹시 남아 있는 숫자 + 구분자 제거 (안전용)
+    label = re.sub(r"^\d+[-_]*", "", label).strip()
+
+    # 오타 보정: Haron -> Heron
+    if label.lower() == "haron":
+        label = "Heron"
+
+    return label
+
+
+# -------------------------------------------------
+# 뷰들
+# -------------------------------------------------
 @method_decorator(csrf_exempt, name="dispatch")
 class PingView(APIView):
     authentication_classes: list = []
     permission_classes: list = []
-    def get(self, request):
-        return Response({"ok": True, "service": "ai", "env": settings.DEBUG})
+
+    def get(self, request, *args, **kwargs):
+        return Response({"ok": True, "service": "ai", "env": bool(settings.DEBUG)})
 
 
 @method_decorator(csrf_exempt, name="dispatch")
-class HeartbeatView(APIView):
+class ImageClassifyView(APIView):
     """
-    YOLO/게이트웨이에서 장치 하트비트를 칠 때 사용(선택).
-    POST /api/ai/heartbeat/  { "device_id": 1 }
-    """
-    authentication_classes: list = []
-    permission_classes: list = []
+    POST /api/ai/classify/
+    form-data:
+        image: <파일>
 
-    def post(self, request):
-        if not auth_ok(request):
-            return Response({"detail": "unauthorized"}, status=status.HTTP_401_UNAUTHORIZED)
+    응답(프론트에서 기대하는 형태에 맞춤):
 
-        device_id = request.data.get("device_id")
-        dev = resolve_device(device_id)
-        if not dev:
-            return Response({"detail": "device not found"}, status=status.HTTP_404_NOT_FOUND)
-
-        # 하트비트 갱신
-        try:
-            dev.mark_heartbeat()
-        except Exception:
-            # mark_heartbeat 없으면 무시
-            pass
-
-        return Response({"ok": True, "device": dev.id})
-
-
-@method_decorator(csrf_exempt, name="dispatch")
-class DetectionIngestView(APIView):
-    """
-    YOLO/게이트웨이에서 감지 결과를 전송.
-    - 인증: 헤더 X-API-KEY
-    - Content-Type:
-        1) application/json
+        {
+          "ok": true,
+          "results": [
             {
-              "device_id": 1,
-              "label": "wild_boar",        # YOLO가 라벨 제공 시
-              "prob": 0.87,                # 0~1
-              "lat": 37.55, "lng": 127.08, # 선택
-              "image_base64": "<data>"     # 선택 (predictor 사용 시)
+              "label": "Goat",       # CameraScreen 에서 쓰는 라벨 (정규화된)
+              "label_raw": "00_Goat",# checkpoint 원본 라벨(디버깅용)
+              "index": 0,            # class index
+              "prob": 0.9234         # 0~1 스케일
             }
-        2) multipart/form-data
-            - fields: device_id, label(선택), prob(선택), lat(선택), lng(선택)
-            - files: image (선택)
-    - 응답: {ok, report_id?, animal, prob, event}
+          ]
+        }
     """
     authentication_classes: list = []
     permission_classes: list = []
 
-    def post(self, request):
-        if not auth_ok(request):
-            return Response({"detail": "unauthorized"}, status=status.HTTP_401_UNAUTHORIZED)
+    def post(self, request, *args, **kwargs):
+        # ─ 1) 파일 꺼내기 ────────────────────────────────
+        image_file = request.FILES.get("image") or request.FILES.get("file")
+        if not image_file:
+            return Response(
+                {"detail": "image 파일이 필요합니다. (form-data 로 image 필드 전송)"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        # ---------- 1) 입력 파싱 ----------
-        data: Dict[str, Any] = dict(request.POST or request.data)
-
-        device_id = data.get("device_id") or data.get("camera_id")
-        dev = resolve_device(device_id)
-        if not dev:
-            return Response({"detail": "device not found"}, status=status.HTTP_404_NOT_FOUND)
-
-        # 하트비트 갱신(감지 시 ONLINE 유지)
+        # ─ 2) 모델 로드 ────────────────────────────────
         try:
-            dev.mark_heartbeat()
-        except Exception:
-            pass
+            model, class_names = get_model()
+        except FileNotFoundError as e:
+            return Response(
+                {"detail": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        except Exception as e:
+            return Response(
+                {"detail": f"모델 로드 중 오류: {e!s}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
-        # 확률 임계치
+        tmp = None
+        tmp_path = None
+
         try:
-            min_prob = float(getattr(settings, "AI_MIN_PROB", 0.5))
-        except Exception:
-            min_prob = 0.5
+            # ─ 3) 업로드 이미지를 임시 파일로 저장 ───────
+            tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+            for chunk in image_file.chunks():
+                tmp.write(chunk)
+            tmp_path = tmp.name
+            tmp.close()
 
-        # prob
-        prob: Optional[float] = None
-        if "prob" in data and data["prob"] is not None:
+            # ─ 4) EfficientNet 추론 ────────────────────
+            predicted_class, confidence = cmi.predict_image(
+                tmp_path,
+                model=model,
+                class_names=class_names,
+            )
+
+            raw_label = str(predicted_class)
+            norm_label = _normalize_label(raw_label)
+
+            # class index 계산 (원본 라벨 기준)
             try:
-                prob = float(data["prob"])
-            except Exception:
-                pass
+                class_index = class_names.index(raw_label)
+            except ValueError:
+                class_index = -1
 
-        # ---------- 2) 이미지 분류(predictor) or YOLO 라벨 ----------
-        img_bytes: Optional[bytes] = None
+            # confidence (0~100) → 0~1 스케일
+            score_unit = round(float(confidence) / 100.0, 4)
 
-        # multipart: request.FILES
-        if "image" in getattr(request, "FILES", {}):
-            img_bytes = request.FILES["image"].read()
-        # json base64
-        elif "image_base64" in data and data["image_base64"]:
-            try:
-                img_bytes = base64.b64decode(data["image_base64"])
-            except Exception:
-                img_bytes = None
+            # ─ 5) 응답 JSON (CameraScreen.pickTop 이 처리하기 좋은 형태) ─
+            return Response(
+                {
+                    "ok": True,
+                    "results": [
+                        {
+                            "label": norm_label,   # "Goat"
+                            "label_raw": raw_label,
+                            "index": class_index,
+                            "prob": score_unit,
+                        }
+                    ],
+                },
+                status=status.HTTP_200_OK,
+            )
 
-        # 우선순위: predictor → 요청에 label 제공
-        label_raw: Optional[str] = None
-        if predictor is not None and img_bytes:
-            try:
-                top1 = predictor.predict(img_bytes, topk=1)[0]
-                label_raw = str(top1["label"])
-                # predictor 확률 사용(요청 prob와 충돌 시 더 높은 값 사용)
-                p2 = float(top1["prob"])
-                prob = max(prob, p2) if prob is not None else p2
-            except Exception:
-                pass
+        except Exception as e:
+            return Response(
+                {"detail": f"이미지 분류 중 오류: {e!s}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+        finally:
+            if tmp is not None and tmp_path:
+                try:
+                    os.remove(tmp_path)
+                except Exception:
+                    pass
 
-        if not label_raw:
-            label_raw = (data.get("label") or "").strip()
 
-        if not label_raw and prob is None:
-            return Response({"detail": "label or image required"}, status=400)
-
-        # 확률 임계치 확인
-        if prob is not None and prob < min_prob:
-            # 시각화만 브로드캐스트 하고 신고는 생성 안 함
-            display = map_to_display_label(label_raw)
-            return Response({"ok": True, "event": "below_threshold", "animal": display, "prob": prob}, status=200)
-
-        # ---------- 3) 중복 억제 (쿨다운) ----------
-        label_key = normalize_label(label_raw)
-        if not should_fire(dev.id, label_key):
-            display = map_to_display_label(label_raw)
-            return Response({"ok": True, "event": "cooldown", "animal": display, "prob": prob}, status=200)
-
-        record_fire(dev.id, label_key)
-
-        # ---------- 4) 좌표/주소/동물 FK/유저 해석 ----------
-        lat, lng = resolve_coords(data, dev)
-        animal_fk, animal_name = resolve_animal_fk(label_key)
-        user = resolve_user_for_ai()
-
-        display_label = animal_fk.name if animal_fk else map_to_display_label(label_key)
-        report_region = data.get("report_region") or f"{dev.name} 주변"
-
-        # ---------- 5) 신고 생성 + WS 브로드캐스트 ----------
-        created, rid = create_report_and_broadcast(
-            device=dev,
-            animal_fk=animal_fk,
-            animal_name=animal_name,
-            prob=prob,
-            lat=lat,
-            lng=lng,
-            user=user,
-            report_region=report_region,
-            source="cctv",
-            status_value="checking",
-            title=f"{display_label} 감지",
-        )
-
-        return Response({
-            "ok": True,
-            "event": "report_created" if created else "visual_only",
-            "report_id": rid,
-            "animal": display_label,
-            "prob": prob,
-        }, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
-
-# --- YOLO control stubs -------------------------------------------------
-@csrf_exempt
-@api_view(["POST"])
-@authentication_classes([])   # 인증 미적용(향후 토큰 적용 예정)
-@permission_classes([])
-def yolo_start(request):
+# -------------------------------------------------
+# YOLOv5s - 실시간 프레임 분류
+# -------------------------------------------------
+@method_decorator(csrf_exempt, name="dispatch")
+class YoloClassifyView(APIView):
     """
-    TODO: 여기에 YOLO 프로세스 시작 로직(서브프로세스/서비스 호출 등) 연결
-    """
-    return JsonResponse({"ok": True, "action": "start", "message": "YOLO start (stub)"})
+    POST /api/ai/classify-yolo/?min_conf=0.2
 
+    - multipart/form-data 로 image 파일 업로드
+    - min_conf 쿼리로 confidence threshold 조정 가능
 
-@csrf_exempt
-@api_view(["POST"])
-@authentication_classes([])
-@permission_classes([])
-def yolo_stop(request):
+    응답 예:
+        {
+          "label": "Goat" | null,
+          "score": 0.78,
+          "bbox": {
+             "x1": ...,
+             "y1": ...,
+             "x2": ...,
+             "y2": ...
+          } | null
+        }
     """
-    TODO: 여기에 YOLO 프로세스 중지 로직 연결
-    """
-    return JsonResponse({"ok": True, "action": "stop", "message": "YOLO stop (stub)"})
+    authentication_classes: list = []
+    permission_classes = [AllowAny]
 
+    def post(self, request, *args, **kwargs):
+        image_file = request.FILES.get("image")
+        if not image_file:
+            return Response(
+                {"detail": "image 파일이 필요합니다."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-@csrf_exempt
-@api_view(["GET"])
-@authentication_classes([])
-@permission_classes([])
-def yolo_status(request):
-    """
-    TODO: 여기서 실제 상태값을 반환하도록 구현 (예: running/idle/error)
-    """
-    return JsonResponse({"ok": True, "status": "idle", "message": "YOLO status (stub)"})
+        # 쿼리스트링으로 threshold 조절 (없으면 0.2)
+        min_conf_str = request.GET.get("min_conf", None)
+        try:
+            min_conf = float(min_conf_str) if min_conf_str is not None else 0.20
+        except ValueError:
+            min_conf = 0.20
+
+        # yolo_utils 에서 파일 객체 기반 추론 사용
+        result = yolo_predict_file_obj(image_file, conf_threshold=min_conf)
+        return Response(result, status=status.HTTP_200_OK)

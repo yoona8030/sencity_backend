@@ -1,656 +1,100 @@
-{% load static %} {% load static %}
-<!DOCTYPE html>
-<html lang="ko">
+{% extends "dashboard/base.html" %} {% load static %} {% block title %}데이터 분석 및 통계{% endblock %} {% block extra_head %}
+<!-- Leaflet -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-<head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>관리자 페이지 | 데이터 분석 및 통계</title>
+<!-- Page CSS -->
+<link rel="stylesheet" href="{% static 'dashboard/css/analytics.css' %}?v=2025-11-06" />
 
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" />
-    <link rel="stylesheet" href="{% static 'dashboard/css/dashboard.css' %}?v=fit-2025-09-19-merge" />
-    <!-- 통계 전용 CSS -->
-    <link rel="stylesheet" href="{% static 'dashboard/css/analytics.css' %}?v=donut-legend-vertical+map-leaflet-vertical" />
+<!-- CSRF (필요 시 JS fetch에서 사용) -->
+<meta name="csrf-token" content="{{ csrf_token }}" />
+{% endblock %} {% block content %}
+<div class="dashboard-body wrap page-analytics">
+  <h1 class="page-title">데이터 분석 및 통계</h1>
 
-    <!-- Leaflet -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-</head>
-
-<body class="page-analytics">
-    <div class="container">
-        <!-- 사이드바 -->
-        <aside class="sidebar">
-            <div class="sidebar-brand">관리자 페이지</div>
-            <div class="sidebar-logo">
-                <img src="{% static 'dashboard/images/logo.png' %}" alt="SENCITY" />
-                <span>SENCITY</span>
-            </div>
-            <a href="{% url 'admin:index' %}" class="sidebar-link">
-                <i class="fa-solid fa-arrow-up-right-from-square"></i> 사이트 바로가기
-            </a>
-            <hr />
-            <nav class="sidebar-menu">
-                <div class="menu-group">사이트 관리</div>
-                <a href="{% url 'dashboard:home' %}" class="menu-item">
-                    <i class="fa-solid fa-th-large"></i> 대시보드
-                </a>
-                <a href="{% url 'dashboard:cctv' %}" class="menu-item">
-                    <i class="fa-solid fa-camera"></i> CCTV 관리
-                </a>
-                <a href="{% url 'dashboard:reports' %}" class="menu-item">
-                    <i class="fa-solid fa-tv"></i> 신고 처리 및 관리
-                </a>
-                <a href="{% url 'dashboard:settings' %}" class="menu-item">
-                    <i class="fa-solid fa-gear"></i> 설정
-                </a>
-                <a href="{% url 'dashboard:users' %}" class="menu-item">
-                    <i class="fa-solid fa-user"></i> 사용자 관리
-                </a>
-
-                <div class="menu-group">콘텐츠 및 통계</div>
-                <a href="{% url 'dashboard:analytics' %}" class="menu-item active">
-                    <i class="fa-solid fa-chart-column"></i> 데이터 분석 및 통계
-                </a>
-                <a href="{% url 'dashboard:contents' %}" class="menu-item">
-                    <i class="fa-solid fa-file-lines"></i> 콘텐츠 관리
-                </a>
-                <a href="{% url 'dashboard:notices' %}" class="menu-item">
-                    <i class="fa-solid fa-bell"></i> 공지 설정
-                </a>
-            </nav>
-        </aside>
-
-        <!-- 본문 -->
-        <main class="main-content">
-            <div class="dashboard-body wrap">
-                <div class="page-header global-toolbar">
-                    <div>
-                        <h1 class="page-title">데이터 분석 및 통계</h1>
-                        <p class="page-subtitle">연도 선택 후 전체 통계를 확인합니다.</p>
-                    </div>
-                    <div class="page-tools">
-                        <label for="year-global" class="sr-only">연도</label>
-                        <select id="year-global"></select>
-                        <button id="apply-global" class="btn">적용</button>
-                    </div>
-                </div>
-
-                <!-- KPI -->
-                <section class="kpis">
-                    <div class="kpi card">
-                        <div class="kpi-title">연간 총 신고 수</div>
-                        <div class="kpi-value" id="kpi-total">-</div>
-                    </div>
-                    <div class="kpi card">
-                        <div class="kpi-title">월 평균</div>
-                        <div class="kpi-value" id="kpi-avg">-</div>
-                    </div>
-                    <div class="kpi card">
-                        <div class="kpi-title">최다 신고 월</div>
-                        <div class="kpi-value" id="kpi-peak">-</div>
-                    </div>
-                    <div class="kpi card">
-                        <div class="kpi-title">최다 동물</div>
-                        <div class="kpi-value" id="kpi-top">-</div>
-                    </div>
-                </section>
-
-                <!-- 1 막대 / 2 도넛(우측 세로 범례) / 3 지도 / 4 선 -->
-                <section class="analytics-grid">
-                    <!-- 1) 막대 -->
-                    <article class="card card--bar" id="monthly-count">
-                        <h2>월별 신고 건수</h2>
-                        <div class="chart chart--wide-short"><canvas id="barMonthly"></canvas></div>
-                    </article>
-
-                    <!-- 2) 도넛 -->
-                    <article class="card card--donut-right" id="animal-donut">
-                        <h2>동물별 분포</h2>
-                        <div class="donut-split">
-                            <canvas id="donutAnimal"></canvas>
-                            <div id="legend-animal" class="legend legend--right"></div>
-                        </div>
-                    </article>
-
-                    <!-- 3) 지도 -->
-                    <article class="card card--map" id="region-map">
-                        <h2>지역 분포 (지도)</h2>
-                        <div class="imgmap-toolbar">
-                            <label for="map-animal">동물</label>
-                            <select id="map-animal">
-                  <option value="">전체</option>
-                  <option>고라니</option>
-                  <option>멧돼지</option>
-                  <option>노루</option>
-                  <option>청설모</option>
-                  <option>다람쥐</option>
-                  <option>너구리</option>
-                  <option>반달가슴곰</option>
-                  <option>족제비</option>
-                  <option>왜가리</option>
-                  <option>중대백로</option>
-                </select>
-                            <button id="map-apply" class="btn">적용</button>
-                            <!-- ▼ 여기만 변경: btn btn-secondary → btn -->
-                            <button id="map-lock" class="btn" aria-pressed="false" title="지도를 고정합니다">고정</button>
-                        </div>
-
-                        <div class="leaflet-wrap">
-                            <div id="leafletMap"></div>
-                            <div class="legend legend--map-vertical">
-                                <span class="legend-max">높음</span>
-                                <div class="legend-bar-vertical"></div>
-                                <span class="legend-min">낮음</span>
-                            </div>
-                        </div>
-                    </article>
-
-                    <!-- 4) 선 -->
-                    <article class="card card--line" id="monthly-trend">
-                        <h2>월별 신고 추이</h2>
-                        <div class="chart chart--line"><canvas id="lineMonthly"></canvas></div>
-                    </article>
-                </section>
-            </div>
-        </main>
+  <div class="page-header">
+    <div>
+      <div class="page-subtitle">연도 선택 후 전체 통계를 확인합니다.</div>
     </div>
+    <div class="page-tools">
+      <label for="year-global" class="sr-only">연도</label>
+      <select id="year-global"></select>
+      <button id="apply-global" class="btn">적용</button>
+    </div>
+  </div>
 
-    <!-- 모달 -->
-    <div id="modal-mask" class="modal-mask">
-        <div class="modal">
-            <h3 id="modal-title">상세</h3>
-            <div class="modal-tabs">
-                <button id="tab-animals" class="on">동물별</button>
-                <button id="tab-regions">지역별</button>
-            </div>
-            <div class="list" id="modal-list-animals"></div>
-            <div class="list" id="modal-list-regions" style="display: none"></div>
-            <button class="close" id="modal-close">
-          <i class="fa-solid fa-xmark"></i>
-          닫기
-        </button>
+  <!-- KPIs -->
+  <section class="kpis">
+    <div class="card">
+      <div class="kpi-title">연간 총 신고 수</div>
+      <div id="kpi-total" class="kpi-value">-</div>
+    </div>
+    <div class="card">
+      <div class="kpi-title">월 평균</div>
+      <div id="kpi-avg" class="kpi-value">-</div>
+    </div>
+    <div class="card">
+      <div class="kpi-title">최다 신고월</div>
+      <div id="kpi-peak" class="kpi-value">-</div>
+    </div>
+    <div class="card">
+      <div class="kpi-title">최다 동물</div>
+      <div id="kpi-top" class="kpi-value">-</div>
+    </div>
+  </section>
+
+  <!-- 메인 그리드 -->
+  <section class="analytics-grid">
+    <!-- 월별 신고 건수 -->
+    <article class="card card--bar">
+      <h2>월별 신고 건수</h2>
+      <div class="chart"><canvas id="barMonthly"></canvas></div>
+    </article>
+
+    <!-- 동물별 분포 -->
+    <article class="card card--donut-right" id="animal-donut">
+      <h2>동물별 분포</h2>
+      <div class="donut-split">
+        <canvas id="donutAnimal"></canvas>
+        <div id="legend-animal" class="legend--right" aria-label="도넛 범례"></div>
+      </div>
+    </article>
+
+    <!-- 지역 분포(지도) -->
+    <article class="card card--map">
+      <h2>지역 분포 (지도)</h2>
+      <div class="imgmap-toolbar">
+        <label class="sr-only" for="map-animal">동물</label>
+        <select id="map-animal">
+          <option value="">전체</option>
+          <option>고라니</option>
+          <option>너구리</option>
+          <option>멧돼지</option>
+          <option>왜가리</option>
+          <option>족제비</option>
+          <option>기타</option>
+        </select>
+        <button id="map-apply" class="btn">적용</button>
+        <button id="map-lock" class="btn" aria-pressed="false" title="지도를 고정합니다">고정</button>
+      </div>
+      <div class="leaflet-wrap">
+        <div id="leafletMap" role="region" aria-label="신고 지점 지도"></div>
+        <div class="legend--map-vertical" aria-hidden="true">
+          <span class="legend-max">많음</span>
+          <div class="legend-bar-vertical"></div>
+          <span class="legend-min">적음</span>
         </div>
-    </div>
+      </div>
+    </article>
 
-    <script>
-        /* ===== 유틸 ===== */
-        const $ = (id) => document.getElementById(id);
-        const getParam = (n) => new URL(location.href).searchParams.get(n);
-        const setParam = (n, v) => {
-            const u = new URL(location.href);
-            u.searchParams.set(n, v);
-            history.replaceState(null, '', u.toString());
-        };
-        const fetchJSON = (url) =>
-            fetch(url, {
-                credentials: 'same-origin',
-            }).then((r) => {
-                if (!r.ok) throw new Error('fetch');
-                return r.json();
-            });
+    <!-- 월별 신고 추이 -->
+    <article class="card card--line">
+      <h2>월별 신고 추이</h2>
+      <div class="chart chart--line"><canvas id="lineMonthly"></canvas></div>
+    </article>
+  </section>
+</div>
 
-        function fillYears(id) {
-            const sel = $(id),
-                years = [2024, 2025, 2026];
-            sel.innerHTML = years.map((y) => `<option value="${y}">${y}</option>`).join('');
-            const q = parseInt(getParam('year') || '', 10);
-            sel.value = Number.isInteger(q) && years.includes(q) ? q : new Date().getFullYear() <= 2026 ? new Date().getFullYear() : 2025;
-        }
-
-        /* ===== 공통 ===== */
-        let BAR_RECTS = [],
-            LINE_POINTS = [];
-
-        function niceStep(maxVal, ticks) {
-            const raw = maxVal / Math.max(ticks, 1);
-            const p = Math.pow(10, Math.floor(Math.log10(Math.max(raw, 1e-9))));
-            const cand = [1, 2, 5].map((k) => k * p);
-            let step = cand[0];
-            for (const c of cand) {
-                if (raw <= c) {
-                    step = c;
-                    break;
-                }
-            }
-            return {
-                step,
-                maxRounded: Math.ceil(maxVal / step) * step,
-            };
-        }
-
-        /* ===== 캔버스 차트 ===== */
-        function drawDonut(canvas, pairs, legend) {
-            const ctx = canvas.getContext('2d');
-            const W = (canvas.width = canvas.clientWidth),
-                H = (canvas.height = canvas.clientHeight);
-            ctx.clearRect(0, 0, W, H);
-            const cx = W / 2,
-                cy = H / 2,
-                r = Math.min(W, H) / 2 - 8,
-                inner = r * 0.58;
-            const colors = ['#64b5f6', '#81c784', '#ffd54f', '#e57373', '#4db6ac', '#ba68c8', '#90a4ae'];
-            if (!pairs || !pairs.length) {
-                ctx.strokeStyle = '#e5e7eb';
-                ctx.lineWidth = r - inner;
-                ctx.beginPath();
-                ctx.arc(cx, cy, (r + inner) / 2, 0, Math.PI * 2);
-                ctx.stroke();
-                if (legend)
-                    legend.innerHTML = `<div class="legend-item"><span class="legend-swatch" style="background:#e5e7eb"></span>데이터 없음</div>`;
-                return;
-            }
-            pairs = [...pairs].sort((a, b) => String(a[0] || '').localeCompare(String(b[0] || '')));
-            const total = pairs.reduce((s, p) => s + (+p[1] || 0), 0) || 1;
-            let a = -Math.PI / 2;
-            pairs.forEach((p, i) => {
-                const v = +p[1] || 0,
-                    sweep = (v / total) * Math.PI * 2;
-                ctx.beginPath();
-                ctx.moveTo(cx, cy);
-                ctx.arc(cx, cy, r, a, a + sweep);
-                ctx.closePath();
-                ctx.fillStyle = colors[i % colors.length];
-                ctx.fill();
-                a += sweep;
-            });
-            ctx.globalCompositeOperation = 'destination-out';
-            ctx.beginPath();
-            ctx.arc(cx, cy, inner, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.globalCompositeOperation = 'source-over';
-            legend &&
-                (legend.innerHTML = pairs
-                    .map(
-                        (p, i) =>
-                        `<div class="legend-item"><span class="legend-swatch" style="background:${colors[i % colors.length]}"></span>${String(
-                  p[0] || '미상'
-                )}</div>`
-                    )
-                    .join(''));
-        }
-
-        function drawBarHorizontal(canvas, labels, values) {
-            const ctx = canvas.getContext('2d'),
-                W = (canvas.width = canvas.clientWidth),
-                H = (canvas.height = canvas.clientHeight);
-            ctx.clearRect(0, 0, W, H);
-            const padL = 48,
-                padR = 24,
-                padT = 24,
-                padB = 32,
-                plotW = W - padL - padR,
-                plotH = H - padT - padB;
-            const vmax = Math.max(...values, 0),
-                ns = niceStep(vmax, 5),
-                xMax = Math.max(ns.maxRounded, 1),
-                xStep = ns.step;
-
-            ctx.strokeStyle = '#e5e7eb';
-            ctx.beginPath();
-            ctx.moveTo(padL, padT);
-            ctx.lineTo(padL, padT + plotH);
-            ctx.lineTo(padL + plotW, padT + plotH);
-            ctx.stroke();
-
-            ctx.fillStyle = '#555';
-            ctx.font = '12px system-ui';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'top';
-            for (let x = 0; x <= xMax; x += xStep) {
-                const px = padL + (x / xMax) * plotW;
-                ctx.strokeStyle = 'rgba(0,0,0,0.06)';
-                ctx.beginPath();
-                ctx.moveTo(px, padT);
-                ctx.lineTo(px, padT + plotH);
-                ctx.stroke();
-                ctx.fillStyle = '#555';
-                ctx.fillText(String(x), px, padT + plotH + 6);
-            }
-
-            const n = values.length,
-                stepY = plotH / n,
-                barH = stepY * 0.6;
-            ctx.fillStyle = '#90caf9';
-            BAR_RECTS = [];
-            values.forEach((v, i) => {
-                const w = plotW * (v / xMax),
-                    x = padL,
-                    y = padT + i * stepY + (stepY - barH) / 2;
-                ctx.fillRect(x, y, w, barH);
-                BAR_RECTS.push({
-                    x,
-                    y,
-                    w,
-                    h: barH,
-                    idx: i,
-                });
-            });
-
-            ctx.fillStyle = '#555';
-            ctx.textAlign = 'right';
-            ctx.textBaseline = 'middle';
-            labels.forEach((lb, i) => {
-                const mm = String(lb || '').slice(5, 7) || String(i + 1).padStart(2, '0');
-                const ly = padT + i * stepY + stepY / 2;
-                ctx.fillText(mm, padL - 6, ly);
-            });
-        }
-
-        function drawLineNormal(canvas, labels, values) {
-            const ctx = canvas.getContext('2d'),
-                W = (canvas.width = canvas.clientWidth),
-                H = (canvas.height = canvas.clientHeight);
-            ctx.clearRect(0, 0, W, H);
-            const padL = 48,
-                padR = 24,
-                padT = 24,
-                padB = 40,
-                plotW = W - padL - padR,
-                plotH = H - padT - padB;
-            const vmax = Math.max(...values, 0),
-                ns = niceStep(vmax, 5),
-                yMax = Math.max(ns.maxRounded, 1),
-                yStep = ns.step;
-
-            ctx.strokeStyle = '#e5e7eb';
-            ctx.beginPath();
-            ctx.moveTo(padL, padT);
-            ctx.lineTo(padL, padT + plotH);
-            ctx.lineTo(padL + plotW, padT + plotH);
-            ctx.stroke();
-
-            ctx.fillStyle = '#555';
-            ctx.font = '12px system-ui';
-            ctx.textAlign = 'right';
-            ctx.textBaseline = 'middle';
-            for (let y = 0; y <= yMax; y += yStep) {
-                const py = padT + plotH - (y / yMax) * plotH;
-                ctx.strokeStyle = 'rgba(0,0,0,0.06)';
-                ctx.beginPath();
-                ctx.moveTo(padL, py);
-                ctx.lineTo(padL + plotW, py);
-                ctx.stroke();
-                ctx.fillStyle = '#555';
-                ctx.fillText(String(y), padL - 6, py);
-            }
-
-            const n = values.length,
-                stepX = n > 1 ? plotW / (n - 1) : 0;
-            ctx.strokeStyle = '#64b5f6';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            LINE_POINTS = [];
-            values.forEach((v, i) => {
-                const x = padL + i * stepX,
-                    y = padT + plotH - plotH * (v / yMax);
-                LINE_POINTS.push({
-                    x,
-                    y,
-                    idx: i,
-                });
-                if (i === 0) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
-            });
-            ctx.stroke();
-            ctx.fillStyle = '#64b5f6';
-            LINE_POINTS.forEach((p) => {
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
-                ctx.fill();
-            });
-
-            ctx.fillStyle = '#555';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'top';
-            labels.forEach((lb, i) => {
-                const mm = String(lb || '').slice(5, 7) || String(i + 1).padStart(2, '0');
-                const lx = padL + i * stepX;
-                ctx.fillText(mm, lx, padT + plotH + 6);
-            });
-        }
-
-        /* ===== 데이터 로드 ===== */
-        let CURRENT_YEAR = new Date().getFullYear();
-
-        function computeKPI(months, counts, top) {
-            const total = counts.reduce((s, n) => s + (n || 0), 0),
-                avg = (total / 12).toFixed(1);
-            let pk = -1,
-                mx = -1;
-            counts.forEach((v, i) => {
-                if (v > mx) {
-                    mx = v;
-                    pk = i;
-                }
-            });
-            $('kpi-total').textContent = String(total);
-            $('kpi-avg').textContent = String(avg);
-            $('kpi-peak').textContent = pk >= 0 && months[pk] ? months[pk] : '-';
-            $('kpi-top').textContent = typeof top === 'string' && top ? top : '-';
-        }
-
-        function loadAll(year) {
-            CURRENT_YEAR = year;
-            fetchJSON('/dashboard/api/analytics/?year=' + encodeURIComponent(year)).then((d) => {
-                const months = Array.isArray(d.months) ? d.months : [],
-                    counts = (Array.isArray(d.counts) ? d.counts : []).map((n) => +n || 0);
-                computeKPI(months, counts, d.top_animal || '-');
-                drawBarHorizontal($('barMonthly'), months, counts);
-                drawDonut($('donutAnimal'), d.by_animal_top || [], $('legend-animal'));
-                drawLineNormal($('lineMonthly'), months, counts);
-                renderLeafletPoints(); // 지도 갱신
-            });
-        }
-
-        /* ===== Leaflet 지도 ===== */
-        let LMAP = null,
-            LAYER_POINTS = null;
-
-        function initLeafletMap() {
-            if (LMAP) return;
-            LMAP = L.map('leafletMap', {
-                zoomControl: true,
-                attributionControl: false,
-                preferCanvas: true,
-            });
-            LMAP.setView([36.4, 127.9], 7);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                maxZoom: 18,
-            }).addTo(LMAP);
-            const southWest = L.latLng(32.5, 123.5),
-                northEast = L.latLng(39.5, 132.0);
-            LMAP.setMaxBounds(L.latLngBounds(southWest, northEast));
-            // 초기 렌더 후 사이즈 보정
-            setTimeout(function() {
-                LMAP.invalidateSize();
-                applyMapLockState();
-            }, 0);
-        }
-        // ===== 지도 고정 토글 =====
-        let MAP_LOCKED = false;
-
-        function setMapInteractivity(enabled) {
-            if (!LMAP) return;
-            const fn = enabled ? 'enable' : 'disable';
-            LMAP.dragging[fn]();
-            LMAP.touchZoom[fn]();
-            LMAP.scrollWheelZoom[fn]();
-            LMAP.doubleClickZoom[fn]();
-            LMAP.boxZoom[fn]();
-            LMAP.keyboard[fn]();
-        }
-
-        function applyMapLockState() {
-            setMapInteractivity(!MAP_LOCKED);
-
-            var wrap = document.querySelector('.leaflet-wrap');
-            if (wrap) {
-                wrap.classList.toggle('locked', MAP_LOCKED);
-            }
-
-            var btn = document.getElementById('map-lock');
-            if (btn) {
-                btn.setAttribute('aria-pressed', MAP_LOCKED ? 'true' : 'false');
-                btn.textContent = MAP_LOCKED ? '해제' : '고정';
-                btn.title = MAP_LOCKED ? '지도를 해제합니다' : '지도를 고정합니다';
-            }
-        }
-
-        // 버튼 연결
-        document.getElementById('map-lock').addEventListener('click', () => {
-            MAP_LOCKED = !MAP_LOCKED;
-            applyMapLockState();
-        });
-
-        // 맵 초기화 직후에도 현재 상태 반영
-        function initLeafletMap() {
-            if (LMAP) return;
-            LMAP = L.map('leafletMap', {
-                zoomControl: true,
-                attributionControl: false,
-                preferCanvas: true,
-            });
-            LMAP.setView([36.4, 127.9], 7);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                maxZoom: 18,
-            }).addTo(LMAP);
-            const southWest = L.latLng(32.5, 123.5),
-                northEast = L.latLng(39.5, 132.0);
-            LMAP.setMaxBounds(L.latLngBounds(southWest, northEast));
-            setTimeout(() => {
-                LMAP.invalidateSize();
-                applyMapLockState();
-            }, 0); // ★ 추가
-        }
-
-        function blueColor(t) {
-            // t: 0~1 정규화. 최소 0.35, 최대 0.95 정도로 올려서 대비 강화
-            const a = 0.35 + t * 0.6; // 0.35 ~ 0.95
-            return `rgba(59,130,246,${a})`; // tailwind blue-500 계열
-        }
-
-        function makeCircleWithHalo(lat, lng, radius, color, tooltipHtml) {
-            // 1) HALO(바깥 링) - 흰색, 채우기 없음, 상호작용 없음
-            const halo = L.circleMarker([lat, lng], {
-                radius: Math.max(radius + 4, 6), // 본 마커보다 조금 더 큼
-                stroke: true,
-                color: '#ffffff',
-                weight: 3,
-                fill: false,
-                interactive: false, // 이벤트 방해하지 않도록
-                pane: 'markerPane',
-            });
-
-            // 2) 본 마커 (채움 + 외곽선 살짝)
-            const dot = L.circleMarker([lat, lng], {
-                radius: Math.max(radius, 4),
-                stroke: true,
-                color: 'rgba(17,24,39,0.40)', // 어두운 외곽선 (gray-900 40%)
-                weight: 1.5,
-                fillColor: color,
-                fillOpacity: 1,
-                pane: 'markerPane',
-            });
-
-            // 3) 호버 시 강조(확대 + 테두리 굵게)
-            dot.on('mouseover', (e) => {
-                e.target.setStyle({
-                    radius: Math.max(radius + 3, 7),
-                    weight: 3,
-                });
-            });
-            dot.on('mouseout', (e) => {
-                e.target.setStyle({
-                    radius: Math.max(radius, 4),
-                    weight: 1.5,
-                });
-            });
-
-            // 4) 툴팁(상시 X, 호버/탭 시 표출). 모바일도 탭으로 표시됨.
-            if (tooltipHtml) {
-                dot.bindTooltip(tooltipHtml, {
-                    direction: 'top',
-                    offset: L.point(0, -6),
-                    sticky: true,
-                    opacity: 0.95,
-                    className: 'map-tip',
-                });
-            }
-
-            return [halo, dot];
-        }
-
-        async function renderLeafletPoints() {
-            try {
-                initLeafletMap();
-                if (LAYER_POINTS) {
-                    LAYER_POINTS.clearLayers();
-                    LMAP.removeLayer(LAYER_POINTS);
-                }
-                LAYER_POINTS = L.layerGroup();
-
-                const animal = (document.getElementById('map-animal').value || '').trim();
-                let url = `/dashboard/api/report-points/?year=${encodeURIComponent(CURRENT_YEAR)}`;
-                if (animal) url += `&animal=${encodeURIComponent(animal)}`;
-
-                const res = await fetch(url, {
-                    credentials: 'include',
-                });
-                if (!res.ok) {
-                    LAYER_POINTS.addTo(LMAP);
-                    return;
-                }
-                const rows = await res.json();
-                if (!rows.length) {
-                    LAYER_POINTS.addTo(LMAP);
-                    return;
-                }
-
-                let cMax = 1;
-                rows.forEach((r) => {
-                    if (r.count > cMax) cMax = r.count;
-                });
-                rows.forEach((r) => {
-                    const t = r.count / cMax;
-                    const radius = 6 + Math.sqrt(r.count) * 2; // 최소 크기도 상향 (기존 4 → 6)
-                    const color = blueColor(t);
-
-                    const tip = `<div><strong>${r.region || '지역'}</strong><br/>건수: ${r.count}</div>`;
-                    const [halo, dot] = makeCircleWithHalo(r.lat, r.lng, radius, color, tip);
-
-                    halo.addTo(LAYER_POINTS);
-                    dot.addTo(LAYER_POINTS);
-                });
-
-                LAYER_POINTS.addTo(LMAP);
-            } catch (e) {
-                console.error(e);
-            }
-        }
-
-        // 이벤트
-        document.getElementById('map-apply').addEventListener('click', renderLeafletPoints);
-
-        /* ===== 초기화 ===== */
-        (function() {
-            fillYears('year-global');
-            const sel = $('year-global'),
-                btn = $('apply-global');
-            const go = () => {
-                const y = Number(sel.value) || new Date().getFullYear();
-                setParam('year', y);
-                loadAll(y);
-            };
-            btn.addEventListener('click', go);
-            sel.addEventListener('change', go);
-            window.addEventListener('resize', () => {
-                loadAll(CURRENT_YEAR);
-                if (LMAP) LMAP.invalidateSize();
-            });
-            go();
-        })();
-    </script>
-</body>
-
-</html>
+<!-- Page JS -->
+<script defer src="{% static 'dashboard/js/analytics.js' %}?v=2025-11-06"></script>
+{% endblock %}

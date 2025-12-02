@@ -19,14 +19,14 @@ os.environ.setdefault(
 from sencity_backend import firebase_init  # noqa: F401
 
 
-MODEL_DIR = BASE_DIR / "sencity_classification_model" / "models"
 SECRET_KEY = env('SECRET_KEY')
 DEBUG = env.bool('DEBUG', default=False)
 CSRF_TRUSTED_ORIGINS = [
   'http://127.0.0.1:8000',
   'http://localhost:8000',
+  'https://dramaturgic-moneyed-cecelia.ngrok-free.dev'
 ]
-ALLOWED_HOSTS = ['*', 'localhost', '127.0.0.1']
+ALLOWED_HOSTS = ['*', 'localhost', '127.0.0.1', '192.168.35.20', 'dramaturgic-moneyed-cecelia.ngrok-free.dev']
 # 업로드 허용 이미지 타입 (views에서 재사용)
 ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp']
 ALLOW_ANON_REPORTS = False
@@ -124,6 +124,8 @@ CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:8000",
     "http://127.0.0.1:8000",
+    "http://192.168.35.20:8000",
+    "https://dramaturgic-moneyed-cecelia.ngrok-free.dev"
 ]
 
 # DB (sqlite 기본 / env로 덮어씀)
@@ -158,6 +160,10 @@ CLASSIFIER_LOAD_FN = env('CLASSIFIER_LOAD_FN', default=None)
 CLASSIFIER_PRED_FN = env('CLASSIFIER_PRED_FN', default=None)
 CLASSIFIER_WEIGHTS = env('CLASSIFIER_WEIGHTS', default=None)
 CLASSIFIER_LABELS  = env('CLASSIFIER_LABELS', default=None)
+
+YOLO_MODELS_DIR = BASE_DIR / "yolo_models"
+YOLO_MODEL_FILENAME = env("YOLO_MODEL_FILENAME", default="best.pt")
+YOLO_MODEL_PATH = str(YOLO_MODELS_DIR / YOLO_MODEL_FILENAME)
 
 # Password validation
 # https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators

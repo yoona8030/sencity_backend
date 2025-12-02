@@ -2,18 +2,13 @@
     --card-pad: 12px;
     --radius: 12px;
     --gap: 16px;
-    --h-small: 240px;
-    /* 도넛 */
     --h-wide-short: 320px;
-    /* 가로 막대 */
     --h-map: 460px;
-    /* 지도 */
     --h-line: 280px;
-    /* 선 그래프 */
 }
 
 
-/* 여백/헤더 */
+/* 레이아웃(본문은 base의 사이드바 오른쪽 영역에 렌더됨) */
 
 .wrap {
     padding: 12px 20px 24px;
@@ -54,7 +49,7 @@
 }
 
 
-/* ▼ 전역 버튼 스타일: 적용/고정 모두 동일 룩 */
+/* 버튼 */
 
 .btn {
     height: 36px;
@@ -79,7 +74,7 @@
 }
 
 
-/* 시각장애인용 숨김 텍스트 */
+/* 접근성 숨김 */
 
 .sr-only {
     position: absolute !important;
@@ -94,7 +89,7 @@
 }
 
 
-/* 카드 */
+/* 카드 & KPI */
 
 .card {
     background: #fff;
@@ -111,9 +106,6 @@
     margin: 0 0 8px;
     font-size: 1rem;
 }
-
-
-/* KPI */
 
 .kpis {
     display: grid;
@@ -143,9 +135,6 @@
     align-items: stretch;
 }
 
-
-/* 데스크톱 */
-
 @media (min-width: 1280px) {
     .card--bar {
         grid-column: span 8;
@@ -153,7 +142,7 @@
     }
     .card--donut-right {
         grid-column: span 4;
-        min-height: var(--h-small);
+        min-height: var(--h-wide-short);
     }
     .card--map {
         grid-column: span 6;
@@ -164,9 +153,6 @@
         min-height: var(--h-line);
     }
 }
-
-
-/* 노트북 */
 
 @media (max-width: 1279.98px) and (min-width: 1024px) {
     .card--bar {
@@ -182,9 +168,6 @@
         grid-column: span 6;
     }
 }
-
-
-/* 태블릿 이하 */
 
 @media (max-width: 1023.98px) {
     .analytics-grid {
@@ -219,27 +202,38 @@
 }
 
 
-/* 도넛: 좌 캔버스 / 우 세로 범례 */
+/* 도넛: 좌 캔버스 / 우 범례 */
 
 .donut-split {
     display: grid;
-    grid-template-columns: 1.15fr 118px;
-    gap: 8px;
+    grid-template-columns: 1.35fr 140px;
+    gap: 12px;
     align-items: center;
-    min-height: calc(var(--h-small) + 12px);
+    min-height: var(--h-wide-short);
 }
+
+#animal-donut {
+    overflow: hidden;
+}
+
+
+/* 도넛 캔버스 */
 
 .donut-split canvas {
     width: 100% !important;
     height: auto !important;
     aspect-ratio: 1/1;
+    display: block;
 }
+
+
+/* 범례(오른쪽) */
 
 .legend--right {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    max-height: calc(var(--h-small) + 8px);
+    max-height: calc(var(--h-wide-short) - 8px);
     overflow: auto;
     padding-right: 2px;
 }
@@ -261,7 +255,7 @@
 }
 
 
-/* 지도 + Leaflet */
+/* 지도 */
 
 .imgmap-toolbar {
     display: flex;
@@ -289,7 +283,7 @@
 }
 
 
-/* 지도 우측 세로 컬러바 */
+/* 지도 컬러바 */
 
 .legend--map-vertical {
     position: absolute;
@@ -322,77 +316,7 @@
 }
 
 
-/* 모달 */
-
-.modal-mask {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.3);
-    display: none;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-}
-
-.modal {
-    background: #fff;
-    border: 1px solid #e5e7eb;
-    border-radius: 12px;
-    max-width: 480px;
-    width: 90%;
-    padding: 16px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
-}
-
-.modal h3 {
-    margin: 0 0 8px;
-    font-size: 1.05rem;
-}
-
-.modal .list {
-    max-height: 240px;
-    overflow: auto;
-    border-top: 1px solid #eee;
-    margin-top: 8px;
-    padding-top: 8px;
-}
-
-.modal .item {
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
-    padding: 4px 0;
-    font-size: 0.95rem;
-}
-
-.modal .close {
-    margin-top: 12px;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    border: 1px solid #e5e7eb;
-    border-radius: 8px;
-    padding: 8px 12px;
-    background: #f9fafb;
-}
-
-
-/* 반응형 세부 */
-
-@media (max-width: 980px) {
-    .kpis {
-        grid-template-columns: repeat(2, 1fr);
-    }
-}
-
-@media (max-width: 640px) {
-    .kpis {
-        grid-template-columns: 1fr;
-    }
-}
-
-
-/* === 지도 고정 관련 시각 피드백(오버레이/줌컨트롤 흐림)만 유지 === */
+/* 지도 고정 표시 */
 
 .leaflet-wrap.locked {
     cursor: not-allowed;
@@ -417,7 +341,7 @@
 }
 
 
-/* 지도 마커 툴팁 */
+/* Leaflet 툴팁 */
 
 .leaflet-tooltip.map-tip {
     background: #111;
@@ -431,5 +355,4 @@
 
 .leaflet-tooltip.map-tip:before {
     display: none;
-    /* 기본 꼬리 제거(취향) */
 }

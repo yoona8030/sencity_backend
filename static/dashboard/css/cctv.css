@@ -1,4 +1,4 @@
-/* ===== 레이아웃 ===== */
+/* ===== Layout ===== */
 
 .cctv-grid {
     display: grid;
@@ -9,18 +9,28 @@
 @media (max-width: 1100px) {
     .cctv-grid {
         grid-template-columns: 1fr;
-        /* 이미 있음 */
     }
     .left-col {
         display: flex;
         flex-direction: column;
         gap: 12px;
-        /* 모바일에서 카드 간 여백 */
     }
 }
 
+.viewer-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 5;
+    pointer-events: none;
+}
 
-/* ===== 카드 공통 ===== */
+.viewer-body {
+    position: relative;
+}
+
+
+/* ===== Card ===== */
 
 .card {
     background: #fff;
@@ -31,13 +41,13 @@
 }
 
 .card-title {
-    margin: 0 0 10px 0;
+    margin: 0 0 10px;
     font-size: 18px;
     font-weight: 800;
 }
 
 
-/* ===== 디바이스 리스트 ===== */
+/* ===== Devices ===== */
 
 .device-list {
     list-style: none;
@@ -64,9 +74,6 @@
 .device-item.offline {
     background: #f7f7f7;
 }
-
-
-/* 표시 요소 */
 
 .device-left {
     display: flex;
@@ -98,7 +105,7 @@
 }
 
 
-/* ===== 센서 ===== */
+/* ===== Sensors ===== */
 
 .sensor-grid {
     display: grid;
@@ -129,7 +136,7 @@
 }
 
 
-/* ===== 뷰어 ===== */
+/* ===== Viewer ===== */
 
 .viewer-card {
     display: flex;
@@ -170,8 +177,12 @@
     border-color: #111;
 }
 
-
-/* 영상 비율 고정 + 하나만 보이도록 */
+.viewer-head-right {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-left: auto;
+}
 
 .viewer-body {
     position: relative;
@@ -198,7 +209,56 @@
 }
 
 
-/* ===== 좌측 카드 클릭 UX 강화 ===== */
+/* 소스 전환 버튼 */
+
+.cam-source-toggle {
+    display: flex;
+    gap: 6px;
+    margin-left: auto;
+}
+
+.src-btn {
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid #ddd;
+    background: #fff;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.src-btn.is-active {
+    background: #222;
+    color: #fff;
+    border-color: #222;
+}
+
+
+/* YOLO 오버레이 */
+
+.viewer-body {
+    position: relative;
+}
+
+.viewer-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 5;
+}
+
+.yolo-box {
+    position: absolute;
+    border: 2px solid #ff4d4f;
+    color: #ff4d4f;
+    background: rgba(0, 0, 0, 0.45);
+    font-size: 12px;
+    padding: 2px 4px;
+    box-sizing: border-box;
+    font-weight: 700;
+}
+
+
+/* ===== Hover/Active ===== */
 
 .device-item,
 .sensor {
@@ -212,9 +272,6 @@
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
 }
 
-
-/* 활성화(선택됨) 표시 */
-
 .device-item.active,
 .sensor.active {
     outline: 2px solid #f6a800;
@@ -222,17 +279,11 @@
     box-shadow: 0 0 0 2px rgba(246, 168, 0, 0.15) inset;
 }
 
-
-/* 키보드 포커스 접근성 */
-
 .device-item:focus-visible,
 .sensor:focus-visible {
     outline: 3px solid #111;
     outline-offset: 2px;
 }
-
-
-/* ONLINE 배경의 가독성 보정 */
 
 .device-item.online .device-info .state {
     color: rgba(0, 0, 0, 0.7);
@@ -240,7 +291,7 @@
 }
 
 
-/* ===== 공통 버튼 ===== */
+/* ===== Buttons ===== */
 
 .btn {
     border: 0;
@@ -256,103 +307,117 @@
 }
 
 .btn-primary {
-    background: #0d6efd;
+    background: #2563eb;
     color: #fff;
-}
-
-.btn-secondary {
-    background: #f1f3f5;
-    color: #111;
 }
 
 .btn-danger {
-    background: #dc3545;
+    background: #b91c1c;
     color: #fff;
 }
 
 
-/* ===== 신고 모달 ===== */
+/* ===== AI badges/controls ===== */
 
-.modal-dim {
-    position: fixed;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.45);
-    display: none;
-    z-index: 1000;
-}
-
-.modal {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 420px;
-    background: #fff;
-    border-radius: 14px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
-    display: none;
-    z-index: 1001;
-}
-
-.modal .hd {
-    padding: 16px 18px;
-    font-weight: 800;
-    border-bottom: 1px solid #eee;
-}
-
-.modal .bd {
-    padding: 14px 18px;
-    display: grid;
-    gap: 10px;
-}
-
-.modal .ft {
-    padding: 14px 18px;
+.ai-badges {
     display: flex;
     gap: 8px;
-    justify-content: flex-end;
-    border-top: 1px solid #eee;
+    align-items: center;
 }
 
-.modal label {
-    display: block;
-    margin: 4px 0 6px;
-    font-size: 13px;
-    color: #555;
+.badge {
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid #334155;
+    font-size: 12px;
+    line-height: 18px;
+    color: #334155;
+    background: #f8fafc;
 }
 
-.modal input,
-.modal select,
-.modal textarea {
-    width: 100%;
-    border: 1px solid #ddd;
-    border-radius: 10px;
-    padding: 10px 12px;
+.badge.running {
+    background: #166534;
+    border-color: #166534;
+    color: #fff;
+}
+
+.ai-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.ai-controls input,
+.ai-controls select {
+    height: 32px;
+    border-radius: 8px;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    color: #111;
+    padding: 0 8px;
+}
+
+
+/* ===== Results ===== */
+
+.content-det {
+    padding: 12px 16px;
+}
+
+.content-title {
+    margin: 0 0 8px;
     font-size: 14px;
 }
 
-.form-row {
+.det-list {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
+    gap: 6px;
+    margin-top: 10px;
 }
 
-@media (max-width: 460px) {
-    .modal {
-        width: calc(100% - 24px);
-    }
-    .form-row {
-        grid-template-columns: 1fr;
-    }
+.det-item {
+    padding: 6px 8px;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background: #f8fafc;
+    color: #111;
+    font-size: 12px;
 }
+
+.raw-wrap {
+    margin-top: 8px;
+}
+
+.raw-box {
+    margin: 8px 0 0;
+    padding: 12px;
+    background: #0b1220;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    color: #e2e8f0;
+    max-height: 260px;
+    overflow: auto;
+}
+
+
+/* spacing tweak */
 
 .left-col .card+.card {
     margin-top: 14px;
-    /* 두 카드(디바이스·센서) 사이 간격 */
 }
 
 .devices-card,
 .sensors-card {
     padding: 12px;
-    /* 기존 16px보다 축소 */
+}
+
+
+/* === 배지 3종 숨김 (레이아웃 보존) === */
+
+.ai-badges,
+#ai-run-badge,
+#ai-det-badge,
+#ai-fps-badge {
+    display: none !important;
 }

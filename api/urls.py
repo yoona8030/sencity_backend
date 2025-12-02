@@ -11,13 +11,12 @@ from .views import (
     ReportViewSet, NotificationViewSet, FeedbackViewSet, StatisticViewSet,
     AdminViewSet, SavedPlaceViewSet,
     MeProfileView, ChangePasswordView, user_profile,
-    ReverseGeocodeView, RecognizeAnimalView, animal_resolve, ReportNoAuthView,
+    ReverseGeocodeView, ReportNoAuthView,
     dashboard_reports, dashboard_report_stats, dashboard_reporters,
     dashboard_report_points, dashboard_report_update_status, DeviceTokenViewSet, PushBroadcastView,
     FCMTestTokenView, FCMTestTopicView, AppBannerViewSet, AppBannerActiveList,
     UpdateReportStatusView
 )
-from .views_ml import recognize_animal_grouped
 from .views_auth_cookie import (
     CookieLoginView,
     CookieRefreshView,
@@ -44,8 +43,6 @@ router.register(r'app-banners',     AppBannerViewSet,     basename='app-banner')
 router.register(r'devices',         DeviceTokenViewSet,   basename='device')
 
 urlpatterns = [
-    # 커스텀 단일 엔드포인트들을 먼저
-    path('animals/resolve/', views.animal_resolve, name='animal_resolve'),
 
     path('signup/', SignUpView.as_view()),
     path('login/',  LoginView.as_view()),
@@ -60,12 +57,6 @@ urlpatterns = [
     path('user/change-password/', ChangePasswordView.as_view()),
 
     path('location/reverse-geocode/', ReverseGeocodeView.as_view()),
-
-    # AI 인식 엔드포인트
-    path('recognize/', RecognizeAnimalView.as_view(), name='api-recognize'),              # 원래 경로
-    path('ai/recognize/', RecognizeAnimalView.as_view(), name='recognize'),
-    path('ai/recognize',  RecognizeAnimalView.as_view()),
-    path('animals/resolve/', animal_resolve, name='api-animal-resolve'),
 
     # 비회원 신고
     path('reports/no-auth', ReportNoAuthView.as_view()),
@@ -103,8 +94,6 @@ urlpatterns = [
     # FCM
     path("fcm/test/token/", FCMTestTokenView.as_view(), name="fcm-test-token"),
     path("fcm/test/topic/", FCMTestTopicView.as_view(), name="fcm-test-topic"),
-
-    path("ml/recognize/", recognize_animal_grouped, name="recognize_animal_grouped"),
 
     # 쿠키 기반 로그인 / 로그아웃 / 토큰 재발급
     path('login/cookie/', CookieLoginView.as_view(), name='cookie-login'),

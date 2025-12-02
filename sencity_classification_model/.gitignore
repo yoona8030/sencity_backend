@@ -1,8 +1,0 @@
-# 필수
-.venv/
-__pycache__/
-*.pyc
-.DS_Store
-
-data/
-models/*.h5

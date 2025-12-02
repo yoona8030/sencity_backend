@@ -17,7 +17,7 @@
     <link rel="icon" href="{% static 'dashboard/images/favicon.ico' %}" sizes="any" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" />
     <link rel="stylesheet" href="{% static 'dashboard/css/dashboard.css' %}?v=fit-2025-09-19" />
-    <link rel="stylesheet" href="{% static 'dashboard/css/notices.css' %}?v=2025-10-25-paging-2" />
+    <link rel="stylesheet" href="{% static 'dashboard/css/notices.css' %}?v=2025-11-19-title-fallback" />
   </head>
 
   <body class="page-notices">
@@ -123,7 +123,7 @@
                 </table>
               </div>
 
-              <!-- ✅ 페이지네이션 -->
+              <!-- 페이지네이션 -->
               <div id="pagination" class="pagination"></div>
             </section>
           </div>
@@ -173,7 +173,7 @@
     <script>
       // ====== 상수/경로 ======
       const API_BASE = '/api/notifications/'; // 목록/상세
-      const PUSH_GROUP_API = '/api/push/broadcast/'; // 공지 전송 API (끝 슬래시)
+      const PUSH_GROUP_API = '/api/push/broadcast/'; // 공지 전송 API
 
       const PAGE_SIZE = 20;
 
@@ -194,12 +194,37 @@
       };
 
       // ====== 유틸 ======
+      // ====== 유틸 ======
       function escapeHtml(s) {
         s = String(s == null ? '' : s);
         return s.replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
       }
+
       function nl2br(s) {
         return escapeHtml(s || '').replace(/\n/g, '<br>');
+      }
+
+      // ✅ 제목 계산: 서버에서 내려주는 title_display / title_suggest 우선 사용
+      function computeTitle(n) {
+        // 1) 우선순위대로 원본 제목 하나 뽑기
+        let title =
+          (n.title_display || '').toString().trim() || (n.title_suggest || '').toString().trim() || (n.title || '').toString().trim();
+
+        // 2) 제목이 아예 없으면 본문 첫 줄 사용
+        if (!title) {
+          const bodyFirst = (n.content || n.body || n.reply || n.message || '').toString().split('\n')[0].trim();
+          if (bodyFirst) {
+            title = bodyFirst;
+          }
+        }
+
+        // 3) 앞에 붙은 "전체 공지 -", "그룹 공지 -", "개인 공지 -" 같은 접두사 제거
+        //    예: "전체 공지 - 오늘 22:00~23:00 점검 예정입니다."
+        //         → "오늘 22:00~23:00 점검 예정입니다."
+        title = title.replace(/^\s*(전체\s*공지|그룹\s*공지|개인\s*공지)\s*[-–:·]\s*/u, '');
+
+        // 4) 최종 기본값
+        return title || '공지';
       }
 
       function detailRow(id, html) {
@@ -209,38 +234,37 @@
         tr.innerHTML = '<td class="detail-cell" colspan="5"><div class="detail-box">' + html + '</div></td>';
         return tr;
       }
+
       function closeDetail(id) {
         els
           .tbody()
-          .querySelectorAll(`tr.detail-row[data-for="${id}"]`)
+          .querySelectorAll('tr.detail-row[data-for="' + id + '"]')
           .forEach((n) => n.remove());
       }
+
       function clearSelected() {
         els
           .tbody()
           .querySelectorAll('tr.selected')
           .forEach((tr) => tr.classList.remove('selected'));
       }
+
       function selectRow(tr) {
         clearSelected();
         tr.classList.add('selected');
       }
 
-      function scopeToType(scopeVal) {
-        // '' → group(기본), personal → individual
-        if (scopeVal === 'personal') return 'individual';
-        return 'group';
-      }
       function ensureModalHidden() {
         const m = els.modal();
         if (!m) return;
-        m.setAttribute('hidden', ''); // HTML hidden 속성
+        m.setAttribute('hidden', '');
         m.setAttribute('aria-hidden', 'true');
-        m.style.display = 'none'; // 안전장치로 display: none
+        m.style.display = 'none';
       }
+
       // ====== 상세 열기 ======
       async function openDetail(id, afterTr) {
-        const opened = els.tbody().querySelector(`tr.detail-row[data-for="${id}"]`);
+        const opened = els.tbody().querySelector('tr.detail-row[data-for="' + id + '"]');
         if (opened) {
           closeDetail(id);
           return;
@@ -251,7 +275,7 @@
 
         try {
           const url = API_BASE + id + '/';
-          const r = await (window.AdminToken?.authFetch
+          const r = await (window.AdminToken && window.AdminToken.authFetch
             ? window.AdminToken.authFetch(url, { method: 'GET' })
             : fetch(url, { credentials: 'same-origin' }));
           if (!r.ok) throw new Error('load failed');
@@ -259,8 +283,10 @@
           const content = String(n.message || n.reply || '').trim();
           loading.querySelector('.detail-box').innerHTML = content ? nl2br(content) : '내용이 없습니다';
 
-          const cell = els.tbody().querySelector(`tr[data-id="${id}"] .title-cell`);
-          if (cell) cell.textContent = (n.title || '공지').trim();
+          const cell = els.tbody().querySelector('tr[data-id="' + id + '"] .title-cell');
+          if (cell) {
+            cell.textContent = computeTitle(n);
+          }
         } catch (e) {
           loading.querySelector('.detail-box').innerHTML = '<div class="detail-error">불러오기에 실패했습니다.</div>';
         }
@@ -270,56 +296,82 @@
       async function loadList(page = 1) {
         const url = new URL(API_BASE, location.origin);
 
-        // 타입 필터
-        const sc = els.scope().value; // '', 'global', 'personal'
-        const type = scopeToType(sc);
-        url.searchParams.set('type', type);
+        const sc = els.scope().value; // "", "global", "personal"
 
-        // 페이지
+        // ★ scope 값에 따라 type 쿼리스트링을 직접 설정
+        //   - 전체("") → type 파라미터 아예 안 보냄
+        //   - 그룹("global") → type=group
+        //   - 개인("personal") → type=individual
+        let type = '';
+        if (sc === 'global') {
+          type = 'group';
+        } else if (sc === 'personal') {
+          type = 'individual';
+        }
+
+        if (type) {
+          url.searchParams.set('type', type);
+        }
+
         url.searchParams.set('page', page);
         url.searchParams.set('page_size', PAGE_SIZE);
 
-        // 검색어(클라이언트 필터)
         const q = (els.q().value || '').trim();
 
         els.tbody().innerHTML = '<tr><td colspan="5" class="empty">불러오는 중…</td></tr>';
 
         try {
-          const r = await (window.AdminToken?.authFetch
+          const r = await (window.AdminToken && window.AdminToken.authFetch
             ? window.AdminToken.authFetch(url.toString(), { method: 'GET' })
             : fetch(url.toString(), { credentials: 'same-origin' }));
+
           if (!r.ok) throw new Error('list failed');
 
-          const d = await r.json(); // DRF 기본: {count, next, previous, results: [...]}
+          const d = await r.json(); // {count, next, previous, results: [...]}
 
           const rows = (d.results || d || []).filter((n) => {
             if (!q) return true;
-            const text = (n.title || '') + '\n' + (n.reply || n.message || '');
+            const text = (computeTitle(n) || '') + '\n' + (n.reply || n.message || '');
             return text.toLowerCase().includes(q.toLowerCase());
           });
 
           let html = '';
           rows.forEach((n) => {
-            const id = n.notification_id ?? n.id;
+            const id = n.notification_id != null ? n.notification_id : n.id;
             const targetLabel = n.type === 'group' ? '전체' : '개인';
-            const typeLabel = n.status_label || n.type || '';
+            const typeLabel = n.type_label || n.status_label || n.type || ''; // ← 여기
             const created = (n.created_at || '').toString();
-            const safeTitle = escapeHtml(n.title || '');
 
-            html += `
-              <tr data-id="${id}" data-type="${escapeHtml(n.type || '')}">
-                <td class="id-cell">${id}</td>
-                <td class="title-cell" role="button" tabindex="0">${safeTitle}</td>
-                <td>${targetLabel}</td>
-                <td>${escapeHtml(typeLabel)}</td>
-                <td>${escapeHtml(created)}</td>
-              </tr>`;
+            const titleForList = computeTitle(n);
+            const safeTitle = escapeHtml(titleForList);
+
+            html +=
+              '<tr data-id="' +
+              id +
+              '" data-type="' +
+              escapeHtml(n.type || '') +
+              '">' +
+              '<td class="id-cell">' +
+              id +
+              '</td>' +
+              '<td class="title-cell" role="button" tabindex="0">' +
+              safeTitle +
+              '</td>' +
+              '<td>' +
+              targetLabel +
+              '</td>' +
+              '<td>' +
+              escapeHtml(typeLabel) +
+              '</td>' +
+              '<td>' +
+              escapeHtml(created) +
+              '</td>' +
+              '</tr>';
           });
 
           els.tbody().innerHTML = html || '<tr><td colspan="5" class="empty">표시할 공지가 없습니다</td></tr>';
 
-          // ✅ 페이지네이션
-          const total = Number(d.count ?? 0);
+          const total = Number(d.count != null ? d.count : 0);
           const totalPages = total > 0 ? Math.ceil(total / PAGE_SIZE) : 1;
           renderPagination(page, totalPages);
         } catch (e) {
@@ -336,9 +388,10 @@
 
         if (totalPages <= 1) return;
 
-        const makeBtn = (num, text = String(num), active = false, disabled = false) => {
+        const makeBtn = (num, text, active, disabled) => {
+          const label = text != null ? text : String(num);
           const b = document.createElement('button');
-          b.textContent = text;
+          b.textContent = label;
           b.type = 'button';
           b.className = 'page-btn' + (active ? ' active' : '');
           if (!disabled) {
@@ -349,18 +402,15 @@
           return b;
         };
 
-        // 처음/이전
         pag.appendChild(makeBtn(1, '«', false, page === 1));
         pag.appendChild(makeBtn(Math.max(1, page - 1), '←', false, page === 1));
 
-        // 숫자 버튼 (최대 5개)
         const start = Math.max(1, page - 2);
         const end = Math.min(totalPages, page + 2);
         for (let i = start; i <= end; i++) {
-          pag.appendChild(makeBtn(i, String(i), i === page));
+          pag.appendChild(makeBtn(i, String(i), i === page, false));
         }
 
-        // 다음/끝
         pag.appendChild(makeBtn(Math.min(totalPages, page + 1), '→', false, page === totalPages));
         pag.appendChild(makeBtn(totalPages, '»', false, page === totalPages));
       }
@@ -371,28 +421,22 @@
       function openPushModal(prefill) {
         const modal = els.modal();
 
-        // ✅ 혹시 다른 컨테이너 안에 있으면 body로 이동해 viewport 기준 보장
         if (modal.parentElement !== document.body) {
           document.body.appendChild(modal);
         }
 
-        els.pmTitle().value = prefill.title || '공지';
+        els.pmTitle().value = (prefill.title || '공지').trim();
         els.pmBody().value = (prefill.body || '').trim();
         els.pmUserIds().value = '';
 
         _lastFocus = document.activeElement;
 
-        // ✅ 스크롤 잠금
         document.body.classList.add('no-scroll');
 
-        // 표시
         modal.removeAttribute('hidden');
         modal.setAttribute('aria-hidden', 'false');
-
-        // flex 중앙 정렬 유지
         modal.style.display = 'flex';
 
-        // 첫 포커스
         requestAnimationFrame(() => {
           els.pmTitle().focus();
         });
@@ -404,36 +448,38 @@
         modal.style.display = 'none';
         modal.setAttribute('hidden', '');
 
-        // ✅ 스크롤 잠금 해제
         document.body.classList.remove('no-scroll');
 
-        // 트리거로 포커스 복귀
         if (_lastFocus && typeof _lastFocus.focus === 'function') {
           _lastFocus.focus();
         } else {
           els.btnPushOpen().focus();
         }
       }
+
       document.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape' && els.modal().getAttribute('aria-hidden') === 'false') closePushModal();
+        if (e.key === 'Escape' && els.modal().getAttribute('aria-hidden') === 'false') {
+          closePushModal();
+        }
       });
+
       els.modal().addEventListener('click', (e) => {
         if (e.target === els.modal()) closePushModal();
       });
+
       document.getElementById('pm-close')?.addEventListener('click', closePushModal);
 
-      // 공지 전송(그룹/개인)
       async function sendBroadcastPush(payload) {
-        if (window.AdminToken?.authFetch) {
+        if (window.AdminToken && window.AdminToken.authFetch) {
           const res = await window.AdminToken.authFetch(PUSH_GROUP_API, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload),
           });
-          if (!res.ok) throw new Error(`HTTP ${res.status}: ` + (await res.text()).slice(0, 300));
+          if (!res.ok) throw new Error('HTTP ' + res.status + ': ' + (await res.text()).slice(0, 300));
           return res.json();
         }
-        // 세션 + CSRF
+
         function getCookie(name) {
           let v = null;
           (document.cookie || '')
@@ -444,6 +490,7 @@
             });
           return v;
         }
+
         const csrftoken = getCookie('csrftoken');
         const res = await fetch(PUSH_GROUP_API, {
           method: 'POST',
@@ -451,14 +498,14 @@
           credentials: 'same-origin',
           body: JSON.stringify(payload),
         });
-        if (!res.ok) throw new Error(`HTTP ${res.status}: ` + (await res.text()).slice(0, 300));
+        if (!res.ok) throw new Error('HTTP ' + res.status + ': ' + (await res.text()).slice(0, 300));
         return res.json();
       }
 
       // ====== 초기 바인딩 ======
       document.addEventListener('DOMContentLoaded', function () {
         ensureModalHidden();
-        // 표 행 클릭/키보드 열기
+
         els.tbody().addEventListener('click', function (e) {
           const tr = e.target.closest('tr');
           if (!tr) return;
@@ -466,6 +513,7 @@
           const id = tr.getAttribute('data-id');
           if (id) openDetail(id, tr);
         });
+
         els.tbody().addEventListener('keydown', function (e) {
           const cell = e.target.closest('td.title-cell');
           if (!cell) return;
@@ -479,17 +527,16 @@
           }
         });
 
-        // 검색/필터/새로고침
         els.btnSearch().addEventListener('click', () => loadList(1));
         els.btnRefresh().addEventListener('click', () => loadList(1));
         els.scope().addEventListener('change', () => loadList(1));
+
         let timer = null;
         els.q().addEventListener('input', function () {
           clearTimeout(timer);
           timer = setTimeout(() => loadList(1), 300);
         });
 
-        // 푸시 모달 열기
         els.btnPushOpen().addEventListener('click', async function () {
           const tr = els.tbody().querySelector('tr.selected');
           if (!tr) {
@@ -498,25 +545,27 @@
           }
           const id = tr.getAttribute('data-id');
 
-          // 프리필
-          let title = (tr.querySelector('.title-cell')?.textContent || '공지').trim();
+          let title = computeTitle({
+            title: tr.querySelector('.title-cell') ? tr.querySelector('.title-cell').textContent : '',
+          });
           let body = '';
           try {
             const url = API_BASE + id + '/';
-            const r = await (window.AdminToken?.authFetch
+            const r = await (window.AdminToken && window.AdminToken.authFetch
               ? window.AdminToken.authFetch(url, { method: 'GET' })
               : fetch(url, { credentials: 'same-origin' }));
             if (r.ok) {
               const n = await r.json();
-              title = (n.title || title).trim();
-              body = (n.reply || n.message || '').trim();
+              title = computeTitle(n);
+              body = String(n.reply || n.message || '').trim();
             }
-          } catch (_) {}
-          openPushModal({ title, body });
+          } catch (_e) {}
+
+          openPushModal({ title: title, body: body });
         });
 
-        // 모달 버튼
         els.pmCancel().addEventListener('click', closePushModal);
+
         els.pmSend().addEventListener('click', async function () {
           const sel = els.tbody().querySelector('tr.selected');
           if (!sel) {
@@ -528,7 +577,6 @@
           const body = String(els.pmBody().value || '').trim();
           const users = String(els.pmUserIds().value || '').trim();
 
-          // 최소 한 개는 필요(백엔드 검증과 일치)
           if (!title && !body) {
             alert('제목 또는 본문 중 하나는 필요합니다.');
             return;
@@ -544,12 +592,11 @@
           }
 
           try {
-            // 🔴 핵심: title/body 키로 보냄 + data.kind=notice (앱에서 분기용)
             const res = await sendBroadcastPush({
-              title: title, // ✅
-              body: body, // ✅
+              title: title,
+              body: body,
               data: { kind: 'notice' },
-              user_ids: user_ids || undefined, // 없으면 전체
+              user_ids: user_ids || undefined,
             });
 
             alert('푸시 전송 완료\nsuccess=' + (res.success ?? 0) + ', failure=' + (res.failure ?? 0));
@@ -560,7 +607,6 @@
           }
         });
 
-        // 첫 로드
         loadList(1);
       });
     </script>

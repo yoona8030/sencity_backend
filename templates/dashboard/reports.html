@@ -1,470 +1,408 @@
-{% load static %}
-<!DOCTYPE html>
-<html lang="ko">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>관리자 페이지 | 신고 처리 및 관리</title>
+{% extends "dashboard/base.html" %} {% load static %} {% block title %}신고 처리 및 관리{% endblock %} {% block extra_head %}
+<link rel="icon" href="{% static 'dashboard/images/favicon.ico' %}" sizes="any" />
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" />
+<link rel="stylesheet" href="{% static 'dashboard/css/dashboard.css' %}?v=fit-2025-09-19" />
+<link rel="stylesheet" href="{% static 'dashboard/css/reports.css' %}?v=2025-10-30-stable" />
+{% endblock %} {% block content %}
+<div class="main">
+  <div class="main-content">
+    <div class="dashboard-body page-wrap page-reports">
+      <h1 class="page-title">신고 처리 및 관리</h1>
 
-    <link rel="icon" href="{% static 'dashboard/images/favicon.ico' %}" sizes="any" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css" />
-    <link rel="stylesheet" href="{% static 'dashboard/css/dashboard.css' %}?v=fit-2025-09-19" />
-    <link rel="stylesheet" href="{% static 'dashboard/css/reports.css' %}?v=2025-10-30-stable" />
-  </head>
-
-  <body class="page-reports">
-    <div class="container">
-      <!-- 사이드바 -->
-      <aside class="sidebar">
-        <div class="sidebar-brand">관리자 페이지</div>
-        <div class="sidebar-logo">
-          <img src="{% static 'dashboard/images/logo.png' %}" alt="SENCITY" />
-          <span>SENCITY</span>
-        </div>
-        <a href="{% url 'admin:index' %}" class="sidebar-link">
-          <i class="fa-solid fa-arrow-up-right-from-square"></i>
-          사이트 바로가기
-        </a>
-        <hr />
-        <nav class="sidebar-menu">
-          <div class="menu-group">사이트 관리</div>
-          <a href="{% url 'dashboard:home' %}" class="menu-item">
-            <i class="fa-solid fa-th-large"></i>
-            대시보드
-          </a>
-          <a href="{% url 'dashboard:cctv' %}" class="menu-item">
-            <i class="fa-solid fa-camera"></i>
-            CCTV 관리
-          </a>
-          <a href="{% url 'dashboard:reports' %}" class="menu-item active">
-            <i class="fa-solid fa-tv"></i>
-            신고 처리 및 관리
-          </a>
-          <a href="{% url 'dashboard:settings' %}" class="menu-item">
-            <i class="fa-solid fa-gear"></i>
-            설정
-          </a>
-          <a href="{% url 'dashboard:users' %}" class="menu-item">
-            <i class="fa-solid fa-user"></i>
-            사용자 관리
-          </a>
-
-          <div class="menu-group">콘텐츠 및 통계</div>
-          <a href="{% url 'dashboard:analytics' %}" class="menu-item">
-            <i class="fa-solid fa-chart-column"></i>
-            데이터 분석 및 통계
-          </a>
-          <a href="{% url 'dashboard:contents' %}" class="menu-item">
-            <i class="fa-solid fa-file-lines"></i>
-            콘텐츠 관리
-          </a>
-          <a href="{% url 'dashboard:notices' %}" class="menu-item">
-            <i class="fa-solid fa-bell"></i>
-            공지 설정
-          </a>
-        </nav>
-      </aside>
-
-      <!-- 본문 -->
-      <main class="main">
-        <div class="main-content">
-          <div class="dashboard-body page-wrap">
-            <h1 class="page-title">신고 처리 및 관리</h1>
-
-            <div class="page-grid">
-              <!-- 요약 -->
-              <section class="summary-strip card indent-under-title" id="summary">
-                <div class="summary-item">
-                  <i class="fa-regular fa-clipboard" aria-label="총 신고 건수"></i>
-                  <div>
-                    <div class="label">총 신고 건수</div>
-                    <div class="value" id="s-total">-</div>
-                  </div>
-                </div>
-                <div class="summary-item">
-                  <i class="fa-regular fa-sun" aria-label="오늘 접수"></i>
-                  <div>
-                    <div class="label">오늘 접수</div>
-                    <div class="value" id="s-today">-</div>
-                  </div>
-                </div>
-                <div class="summary-item">
-                  <i class="fa-regular fa-bell" aria-label="미해결"></i>
-                  <div>
-                    <div class="label">미해결</div>
-                    <div class="value" id="s-unresolved">-</div>
-                  </div>
-                </div>
-              </section>
-
-              <!-- 본문 리스트 -->
-              <div class="page-main">
-                <section class="card indent-under-title">
-                  <h3>최근 신고 리스트</h3>
-                  <div class="toolbar">
-                    <input id="q" placeholder="키워드/지역/상태/신고자" />
-                    <select id="f-status">
-                      <option value="">전체 상태</option>
-                      <option value="checking">접수 완료</option>
-                      <option value="on_hold">보류</option>
-                      <option value="completed">답변 완료</option>
-                    </select>
-                    <input type="date" id="from" />
-                    <input type="date" id="to" />
-                    <button id="search">검색</button>
-                  </div>
-                  <div class="table-wrap"><div id="report-list"></div></div>
-                </section>
-              </div>
-
-              <!-- 오른쪽 사이드 -->
-              <aside class="page-aside">
-                <section class="card">
-                  <h3>신고한 사용자 TOP</h3>
-                  <div id="reporters"></div>
-                </section>
-              </aside>
+      <div class="page-grid">
+        <!-- 요약 -->
+        <section class="summary-strip card indent-under-title" id="summary">
+          <div class="summary-item">
+            <i class="fa-regular fa-clipboard" aria-label="총 신고 건수"></i>
+            <div>
+              <div class="label">총 신고 건수</div>
+              <div class="value" id="s-total">-</div>
             </div>
           </div>
+          <div class="summary-item">
+            <i class="fa-regular fa-sun" aria-label="오늘 접수"></i>
+            <div>
+              <div class="label">오늘 접수</div>
+              <div class="value" id="s-today">-</div>
+            </div>
+          </div>
+          <div class="summary-item">
+            <i class="fa-regular fa-bell" aria-label="미해결"></i>
+            <div>
+              <div class="label">미해결</div>
+              <div class="value" id="s-unresolved">-</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 본문 리스트 -->
+        <div class="page-main">
+          <section class="card indent-under-title">
+            <h3>최근 신고 리스트</h3>
+            <div class="toolbar">
+              <input id="q" placeholder="키워드/지역/상태/신고자" />
+              <select id="f-status">
+                <option value="">전체 상태</option>
+                <option value="checking">접수 완료</option>
+                <option value="on_hold">보류</option>
+                <option value="completed">답변 완료</option>
+              </select>
+              <input type="date" id="from" />
+              <input type="date" id="to" />
+              <button id="search">검색</button>
+            </div>
+            <div class="table-wrap"><div id="report-list"></div></div>
+          </section>
         </div>
-      </main>
+
+        <!-- 오른쪽 사이드 -->
+        <aside class="page-aside">
+          <section class="card">
+            <h3>신고한 사용자 TOP</h3>
+            <div id="reporters"></div>
+          </section>
+        </aside>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 오른쪽 슬라이드 프리뷰 패널 -->
+<aside id="report-preview" class="report-preview" aria-hidden="true">
+  <button class="close" id="preview-close" aria-label="닫기"><i class="fa-solid fa-xmark"></i></button>
+  <div class="preview-body">
+    <div class="img-wrap">
+      <img id="preview-img" alt="신고 사진" style="width: 100%; height: 220px; object-fit: cover; visibility: hidden" />
+    </div>
+    <div class="meta">
+      <div>
+        <strong>ID</strong>
+        <span id="pv-id">-</span>
+      </div>
+      <div>
+        <strong>동물</strong>
+        <span id="pv-animal">-</span>
+      </div>
+      <div>
+        <strong>사용자</strong>
+        <span id="pv-user">-</span>
+      </div>
+      <div>
+        <strong>지역</strong>
+        <span id="pv-loc">-</span>
+      </div>
+      <div>
+        <strong>상태</strong>
+        <span id="pv-stat" class="badge">-</span>
+      </div>
+      <div>
+        <strong>일시</strong>
+        <span id="pv-time">-</span>
+      </div>
     </div>
 
-    <!-- 오른쪽 슬라이드 프리뷰 패널 -->
-    <aside id="report-preview" class="report-preview" aria-hidden="true">
-      <button class="close" id="preview-close" aria-label="닫기"><i class="fa-solid fa-xmark"></i></button>
-      <div class="preview-body">
-        <div class="img-wrap">
-          <img id="preview-img" alt="신고 사진" style="width: 100%; height: 220px; object-fit: cover; visibility: hidden" />
-        </div>
-        <div class="meta">
-          <div>
-            <strong>ID</strong>
-            <span id="pv-id">-</span>
-          </div>
-          <div>
-            <strong>동물</strong>
-            <span id="pv-animal">-</span>
-          </div>
-          <div>
-            <strong>사용자</strong>
-            <span id="pv-user">-</span>
-          </div>
-          <div>
-            <strong>지역</strong>
-            <span id="pv-loc">-</span>
-          </div>
-          <div>
-            <strong>상태</strong>
-            <span id="pv-stat" class="badge">-</span>
-          </div>
-          <div>
-            <strong>일시</strong>
-            <span id="pv-time">-</span>
-          </div>
-        </div>
-
-        <!-- 퀵액션 -->
-        <div class="qa">
-          <div class="btns">
-            <button class="btn" data-status="checking">접수 완료</button>
-            <button class="btn" data-status="on_hold">보류</button>
-            <button class="btn primary" data-status="completed">답변 완료</button>
-          </div>
-          <textarea id="qa-reply" placeholder="(선택) 사용자에게 보낼 메모/답변"></textarea>
-        </div>
-
-        <div class="footer"><a id="pv-link" class="btn-link" href="#" target="_self" rel="noopener">자세히 보기</a></div>
+    <!-- 퀵액션 -->
+    <div class="qa">
+      <div class="btns">
+        <button class="btn" data-status="checking">접수 완료</button>
+        <button class="btn" data-status="on_hold">보류</button>
+        <button class="btn primary" data-status="completed">답변 완료</button>
       </div>
-    </aside>
+      <textarea id="qa-reply" placeholder="(선택) 사용자에게 보낼 메모/답변"></textarea>
+    </div>
 
-    <script>
-      /* ==== 상수 & CSRF ==== */
-      var API_REPORT_STATS = '/api/dashboard/report-stats/';
-      var API_REPORTS = '/api/dashboard/reports/';
-      var API_REPORTERS = '/api/dashboard/reporters/';
-      var ORIGIN = window.location.origin;
-      function API_STATUS_URL(id) {
-        return ORIGIN + '/api/dashboard/reports/' + id + '/status/';
+    <div class="footer"><a id="pv-link" class="btn-link" href="#" target="_self" rel="noopener">자세히 보기</a></div>
+  </div>
+</aside>
+{% endblock %} {% block extra_js %}
+<script>
+  /* ==== 상수 & CSRF ==== */
+  var API_REPORT_STATS = '/api/dashboard/report-stats/';
+  var API_REPORTS = '/api/dashboard/reports/';
+  var API_REPORTERS = '/api/dashboard/reporters/';
+  var ORIGIN = window.location.origin;
+  function API_STATUS_URL(id) {
+    return ORIGIN + '/api/dashboard/reports/' + id + '/status/';
+  }
+
+  function getCookie(name) {
+    var v = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
+    return v ? v.pop() : '';
+  }
+  var csrftoken = getCookie('csrftoken');
+
+  /* ==== 공통 유틸 ==== */
+  function fetchJSON(url) {
+    return fetch(url, { credentials: 'same-origin' }).then(async function (r) {
+      if (r.status === 401 || r.status === 403) {
+        alert('로그인이 필요합니다.');
+        window.location.href = '/admin/login/?next=' + encodeURIComponent(location.pathname);
+        return new Promise(() => {});
       }
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    });
+  }
+  function htmlEscape(s) {
+    if (!s) return '';
+    return s.replace(/[&<>\"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
+  }
+  function statusBadgeClass(s) {
+    var t = (s || '').toLowerCase();
+    if (t === 'completed') return 'status--completed';
+    if (t === 'checking') return 'status--checking';
+    if (t === 'on_hold') return 'status--onhold';
+    return '';
+  }
 
-      function getCookie(name) {
-        var v = document.cookie.match('(^|;)\\s*' + name + '\\s*=\\s*([^;]+)');
-        return v ? v.pop() : '';
-      }
-      var csrftoken = getCookie('csrftoken');
+  /* ==== 전역 상태 & 요소 ==== */
+  var CURRENT_ROW = null,
+    LAST_PAGE = 1,
+    LAST_QUERY = '';
+  var PLACEHOLDER_IMG =
+    'data:image/svg+xml;utf8,' +
+    encodeURIComponent(
+      '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 4 3"><rect width="4" height="3" fill="#eeeeee"/><text x="2" y="1.7" font-size="0.5" text-anchor="middle" fill="#999999">no image</text></svg>'
+    );
 
-      /* ==== 공통 유틸 ==== */
-      function fetchJSON(url) {
-        return fetch(url, { credentials: 'same-origin' }).then(async function (r) {
-          if (r.status === 401 || r.status === 403) {
-            alert('로그인이 필요합니다.');
-            window.location.href = '/admin/login/?next=' + encodeURIComponent(location.pathname);
-            return new Promise(() => {});
-          }
-          if (!r.ok) throw new Error(await r.text());
-          return r.json();
-        });
-      }
-      function htmlEscape(s) {
-        if (!s) return '';
-        return s.replace(/[&<>\"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]));
-      }
-      function statusBadgeClass(s) {
-        var t = (s || '').toLowerCase();
-        if (t === 'completed') return 'status--completed';
-        if (t === 'checking') return 'status--checking';
-        if (t === 'on_hold') return 'status--onhold';
-        return '';
-      }
+  var els = {
+    total: () => document.getElementById('s-total'),
+    today: () => document.getElementById('s-today'),
+    unresolved: () => document.getElementById('s-unresolved'),
+    list: () => document.getElementById('report-list'),
+    reporters: () => document.getElementById('reporters'),
+    q: () => document.getElementById('q'),
+    searchBtn: () => document.getElementById('search'),
+    statusFilter: () => document.getElementById('f-status'),
+    from: () => document.getElementById('from'),
+    to: () => document.getElementById('to'),
+    panel: () => document.getElementById('report-preview'),
+    closeBtn: () => document.getElementById('preview-close'),
+    pvImg: () => document.getElementById('preview-img'),
+    pv: () => ({
+      id: document.getElementById('pv-id'),
+      animal: document.getElementById('pv-animal'),
+      user: document.getElementById('pv-user'),
+      loc: document.getElementById('pv-loc'),
+      stat: document.getElementById('pv-stat'),
+      time: document.getElementById('pv-time'),
+      link: document.getElementById('pv-link'),
+    }),
+    replyBox: () => document.getElementById('qa-reply'),
+    qaBtns: () => document.querySelectorAll('.qa .btn'),
+  };
 
-      /* ==== 전역 상태 & 요소 ==== */
-      var CURRENT_ROW = null,
-        LAST_PAGE = 1,
-        LAST_QUERY = '';
-      var PLACEHOLDER_IMG =
-        'data:image/svg+xml;utf8,' +
-        encodeURIComponent(
-          '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 4 3"><rect width="4" height="3" fill="#eeeeee"/><text x="2" y="1.7" font-size="0.5" text-anchor="middle" fill="#999999">no image</text></svg>'
-        );
+  /* ==== 요약 ==== */
+  function loadSummary() {
+    els.total().textContent = '…';
+    els.today().textContent = '…';
+    els.unresolved().textContent = '…';
+    return fetchJSON(API_REPORT_STATS).then((d) => {
+      els.total().textContent = d.total ?? d.total_reports ?? 0;
+      els.today().textContent = d.today ?? d.today_reports ?? 0;
+      els.unresolved().textContent = d.unresolved ?? d.unresolved_reports ?? 0;
+    });
+  }
 
-      var els = {
-        total: () => document.getElementById('s-total'),
-        today: () => document.getElementById('s-today'),
-        unresolved: () => document.getElementById('s-unresolved'),
-        list: () => document.getElementById('report-list'),
-        reporters: () => document.getElementById('reporters'),
-        q: () => document.getElementById('q'),
-        searchBtn: () => document.getElementById('search'),
-        statusFilter: () => document.getElementById('f-status'),
-        from: () => document.getElementById('from'),
-        to: () => document.getElementById('to'),
-        panel: () => document.getElementById('report-preview'),
-        closeBtn: () => document.getElementById('preview-close'),
-        pvImg: () => document.getElementById('preview-img'),
-        pv: () => ({
-          id: document.getElementById('pv-id'),
-          animal: document.getElementById('pv-animal'),
-          user: document.getElementById('pv-user'),
-          loc: document.getElementById('pv-loc'),
-          stat: document.getElementById('pv-stat'),
-          time: document.getElementById('pv-time'),
-          link: document.getElementById('pv-link'),
-        }),
-        replyBox: () => document.getElementById('qa-reply'),
-        qaBtns: () => document.querySelectorAll('.qa .btn'),
-      };
+  /* ==== 리스트 ==== */
+  function loadReports(page, q) {
+    LAST_PAGE = page || 1;
+    LAST_QUERY = q || '';
+    els.list().innerHTML = '<div class="loading">불러오는 중…</div>';
+    const url = new URL(API_REPORTS, window.location.origin);
+    url.searchParams.set('page', LAST_PAGE);
+    url.searchParams.set('page_size', 20);
+    if (LAST_QUERY) url.searchParams.set('q', LAST_QUERY);
+    const st = els.statusFilter().value;
+    const from = els.from().value,
+      to = els.to().value;
+    if (st) url.searchParams.set('status', st);
+    if (from) url.searchParams.set('from', from);
+    if (to) url.searchParams.set('to', to);
+    return fetchJSON(url).then(renderTable);
+  }
 
-      /* ==== 요약 ==== */
-      function loadSummary() {
-        els.total().textContent = '…';
-        els.today().textContent = '…';
-        els.unresolved().textContent = '…';
-        return fetchJSON(API_REPORT_STATS).then((d) => {
-          els.total().textContent = d.total ?? d.total_reports ?? 0;
-          els.today().textContent = d.today ?? d.today_reports ?? 0;
-          els.unresolved().textContent = d.unresolved ?? d.unresolved_reports ?? 0;
-        });
-      }
+  function renderTable(d) {
+    const list = d?.results || [];
+    if (!list.length) {
+      els.list().innerHTML = '<div class="empty">데이터가 없습니다</div>';
+      return;
+    }
 
-      /* ==== 리스트 ==== */
-      function loadReports(page, q) {
-        LAST_PAGE = page || 1;
-        LAST_QUERY = q || '';
-        els.list().innerHTML = '<div class="loading">불러오는 중…</div>';
-        const url = new URL(API_REPORTS, window.location.origin);
-        url.searchParams.set('page', LAST_PAGE);
-        url.searchParams.set('page_size', 20);
-        if (LAST_QUERY) url.searchParams.set('q', LAST_QUERY);
-        const st = els.statusFilter().value;
-        const from = els.from().value,
-          to = els.to().value;
-        if (st) url.searchParams.set('status', st);
-        if (from) url.searchParams.set('from', from);
-        if (to) url.searchParams.set('to', to);
-        return fetchJSON(url).then(renderTable);
-      }
+    const rows = list
+      .map((r) => {
+        const animal =
+          typeof r.animal === 'object'
+            ? r.animal?.name || r.animal?.label || '(알수없음)'
+            : r.animal || r.animal_name || r.species || '(알수없음)';
 
-      function renderTable(d) {
-        const list = d?.results || [];
-        if (!list.length) {
-          els.list().innerHTML = '<div class="empty">데이터가 없습니다</div>';
-          return;
-        }
+        return `
+      <tr class="report-row"
+          data-id="${r.id}"
+          data-animal="${htmlEscape(animal)}"
+          data-reporter="${htmlEscape(r.reporter || '')}"
+          data-region="${htmlEscape(r.region || '')}"
+          data-status="${htmlEscape(r.status || '')}"
+          data-created="${htmlEscape(r.created_at || '')}"
+          data-photo="${htmlEscape(r.image_url || '')}">
+        <td>${r.id}</td>
+        <td>${htmlEscape(animal)}</td>
+        <td>${htmlEscape(r.reporter || '')}</td>
+        <td>${htmlEscape(r.region || '')}</td>
+        <td><span class="badge ${statusBadgeClass(r.status)}">${htmlEscape(r.status || '')}</span></td>
+      </tr>`;
+      })
+      .join('');
 
-        const rows = list
-          .map((r) => {
-            const animal =
-              typeof r.animal === 'object'
-                ? r.animal?.name || r.animal?.label || '(알수없음)'
-                : r.animal || r.animal_name || r.species || '(알수없음)';
+    els.list().innerHTML = `
+      <table class="table">
+        <thead><tr><th>ID</th><th>동물</th><th>사용자</th><th>지역</th><th>상태</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
 
-            return `
-        <tr class="report-row"
-            data-id="${r.id}"
-            data-animal="${htmlEscape(animal)}"
-            data-reporter="${htmlEscape(r.reporter || '')}"
-            data-region="${htmlEscape(r.region || '')}"
-            data-status="${htmlEscape(r.status || '')}"
-            data-created="${htmlEscape(r.created_at || '')}"
-            data-photo="${htmlEscape(r.image_url || '')}">
-          <td>${r.id}</td>
-          <td>${htmlEscape(animal)}</td>
-          <td>${htmlEscape(r.reporter || '')}</td>
-          <td>${htmlEscape(r.region || '')}</td>
-          <td><span class="badge ${statusBadgeClass(r.status)}">${htmlEscape(r.status || '')}</span></td>
-        </tr>`;
-          })
-          .join('');
-
-        els.list().innerHTML = `
-          <table class="table">
-            <thead><tr><th>ID</th><th>동물</th><th>사용자</th><th>지역</th><th>상태</th></tr></thead>
-            <tbody>${rows}</tbody>
-          </table>`;
-
-        els.list().addEventListener('click', function (e) {
-          var tr = e.target.closest('tr.report-row');
-          if (!tr) return;
-          openPreview({
-            id: tr.dataset.id,
-            animal: tr.dataset.animal,
-            reporter: tr.dataset.reporter,
-            region: tr.dataset.region,
-            status: tr.dataset.status,
-            created_at: tr.dataset.created,
-            photo_url: tr.dataset.photo,
-          });
-        });
-      }
-
-      /* ==== 프리뷰 ==== */
-      function openPreview(data) {
-        CURRENT_ROW = data;
-        const pv = els.pv(),
-          img = els.pvImg();
-        img.style.visibility = 'hidden';
-        img.onload = () => (img.style.visibility = 'visible');
-        img.onerror = () => {
-          img.src = PLACEHOLDER_IMG;
-          img.style.visibility = 'visible';
-        };
-        img.src = data.photo_url || PLACEHOLDER_IMG;
-
-        pv.id.textContent = data.id || '-';
-        pv.animal.textContent = data.animal || '-';
-        pv.user.textContent = data.reporter || '-';
-        pv.loc.textContent = data.region || '-';
-        pv.stat.textContent = data.status || '-';
-        pv.stat.className = 'badge ' + statusBadgeClass(data.status);
-        pv.time.textContent = data.created_at || '-';
-        pv.link.href = '/dashboard/reports/' + (data.id || '') + '/';
-
-        els.panel().classList.add('on');
-        els.panel().setAttribute('aria-hidden', 'false');
-      }
-      function closePreview() {
-        els.panel().classList.remove('on');
-        els.panel().setAttribute('aria-hidden', 'true');
-        CURRENT_ROW = null;
-      }
-
-      /* ==== 상태 변경 ==== */
-      function setQaDisabled(disabled) {
-        els.qaBtns().forEach((b) => (b.disabled = disabled));
-      }
-      function changeStatus(newStatus) {
-        if (!CURRENT_ROW?.id) return alert('먼저 항목을 선택하세요.');
-        const pv = els.pv();
-        const prev = { status: CURRENT_ROW.status, cls: pv.stat.className };
-        setQaDisabled(true);
-
-        // 낙관적 반영
-        CURRENT_ROW.status = newStatus;
-        pv.stat.textContent = newStatus;
-        pv.stat.className = 'badge ' + statusBadgeClass(newStatus);
-
-        const body = { status: newStatus };
-        const memo = (els.replyBox().value || '').trim();
-        if (memo) body.reply = memo;
-
-        fetch(API_STATUS_URL(CURRENT_ROW.id), {
-          method: 'PATCH',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
-          body: JSON.stringify(body),
-        })
-          .then((r) => (r.ok ? r.json() : r.text().then((t) => Promise.reject(t))))
-          .then(() => {
-            els.replyBox().value = '';
-            loadReports(LAST_PAGE, LAST_QUERY);
-          })
-          .catch((e) => {
-            // 롤백
-            CURRENT_ROW.status = prev.status;
-            pv.stat.textContent = prev.status;
-            pv.stat.className = prev.cls;
-            alert('상태 변경 실패: ' + e);
-          })
-          .finally(() => setQaDisabled(false));
-      }
-
-      /* ==== 신고자 TOP ==== */
-      function loadReporters() {
-        els.reporters().innerHTML = '<div class="loading">불러오는 중…</div>';
-        const url = new URL(API_REPORTERS, window.location.origin);
-        url.searchParams.set('limit', 10);
-        return fetchJSON(url).then((d) => {
-          const arr = d?.results || [];
-          if (!arr.length) {
-            els.reporters().innerHTML = '<div class="empty">데이터가 없습니다</div>';
-            return;
-          }
-          els.reporters().innerHTML =
-            '<div class="list">' +
-            arr
-              .map(
-                (r) => `
-            <div class="list-item"><span class="name">${htmlEscape(r.name || '(알수없음)')}</span>
-            <span class="count">${r.count ?? 0}</span></div>`
-              )
-              .join('') +
-            '</div>';
-        });
-      }
-
-      /* ==== 이벤트 & 초기화 ==== */
-      document.addEventListener('DOMContentLoaded', function () {
-        let searchTimer;
-        els.q().addEventListener('input', function () {
-          clearTimeout(searchTimer);
-          searchTimer = setTimeout(() => loadReports(1, els.q().value.trim()), 300);
-        });
-        els.searchBtn().addEventListener('click', () => loadReports(1, els.q().value.trim()));
-        els.statusFilter().addEventListener('change', () => loadReports(1, els.q().value.trim()));
-        els.from().addEventListener('change', () => loadReports(1, els.q().value.trim()));
-        els.to().addEventListener('change', () => loadReports(1, els.q().value.trim()));
-
-        els.closeBtn().addEventListener('click', closePreview);
-        document.addEventListener('keydown', (e) => {
-          if (e.key === 'Escape') closePreview();
-        });
-        document.addEventListener('click', (e) => {
-          const panel = els.panel();
-          if (panel.classList.contains('on') && !panel.contains(e.target) && !e.target.closest('tr.report-row')) {
-            closePreview();
-          }
-        });
-
-        // 퀵액션 버튼 → 상태 변경
-        els.qaBtns().forEach((btn) => btn.addEventListener('click', () => changeStatus(btn.dataset.status)));
-
-        // 초기 로드
-        Promise.all([loadSummary(), loadReports(1, ''), loadReporters()]).catch((e) => {
-          console.error(e);
-          alert('데이터를 불러오지 못했습니다.');
-        });
+    els.list().addEventListener('click', function (e) {
+      var tr = e.target.closest('tr.report-row');
+      if (!tr) return;
+      openPreview({
+        id: tr.dataset.id,
+        animal: tr.dataset.animal,
+        reporter: tr.dataset.reporter,
+        region: tr.dataset.region,
+        status: tr.dataset.status,
+        created_at: tr.dataset.created,
+        photo_url: tr.dataset.photo,
       });
-    </script>
-  </body>
-</html>
+    });
+  }
+
+  /* ==== 프리뷰 ==== */
+  function openPreview(data) {
+    CURRENT_ROW = data;
+    const pv = els.pv(),
+      img = els.pvImg();
+    img.style.visibility = 'hidden';
+    img.onload = () => (img.style.visibility = 'visible');
+    img.onerror = () => {
+      img.src = PLACEHOLDER_IMG;
+      img.style.visibility = 'visible';
+    };
+    img.src = data.photo_url || PLACEHOLDER_IMG;
+
+    pv.id.textContent = data.id || '-';
+    pv.animal.textContent = data.animal || '-';
+    pv.user.textContent = data.reporter || '-';
+    pv.loc.textContent = data.region || '-';
+    pv.stat.textContent = data.status || '-';
+    pv.stat.className = 'badge ' + statusBadgeClass(data.status);
+    pv.time.textContent = data.created_at || '-';
+    pv.link.href = '/dashboard/reports/' + (data.id || '') + '/';
+
+    els.panel().classList.add('on');
+    els.panel().setAttribute('aria-hidden', 'false');
+  }
+  function closePreview() {
+    els.panel().classList.remove('on');
+    els.panel().setAttribute('aria-hidden', 'true');
+    CURRENT_ROW = null;
+  }
+
+  /* ==== 상태 변경 ==== */
+  function setQaDisabled(disabled) {
+    els.qaBtns().forEach((b) => (b.disabled = disabled));
+  }
+  function changeStatus(newStatus) {
+    if (!CURRENT_ROW?.id) return alert('먼저 항목을 선택하세요.');
+    const pv = els.pv();
+    const prev = { status: CURRENT_ROW.status, cls: pv.stat.className };
+    setQaDisabled(true);
+
+    // 낙관적 반영
+    CURRENT_ROW.status = newStatus;
+    pv.stat.textContent = newStatus;
+    pv.stat.className = 'badge ' + statusBadgeClass(newStatus);
+
+    const body = { status: newStatus };
+    const memo = (els.replyBox().value || '').trim();
+    if (memo) body.reply = memo;
+
+    fetch(API_STATUS_URL(CURRENT_ROW.id), {
+      method: 'PATCH',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
+      body: JSON.stringify(body),
+    })
+      .then((r) => (r.ok ? r.json() : r.text().then((t) => Promise.reject(t))))
+      .then(() => {
+        els.replyBox().value = '';
+        loadReports(LAST_PAGE, LAST_QUERY);
+      })
+      .catch((e) => {
+        // 롤백
+        CURRENT_ROW.status = prev.status;
+        pv.stat.textContent = prev.status;
+        pv.stat.className = prev.cls;
+        alert('상태 변경 실패: ' + e);
+      })
+      .finally(() => setQaDisabled(false));
+  }
+
+  /* ==== 신고자 TOP ==== */
+  function loadReporters() {
+    els.reporters().innerHTML = '<div class="loading">불러오는 중…</div>';
+    const url = new URL(API_REPORTERS, window.location.origin);
+    url.searchParams.set('limit', 10);
+    return fetchJSON(url).then((d) => {
+      const arr = d?.results || [];
+      if (!arr.length) {
+        els.reporters().innerHTML = '<div class="empty">데이터가 없습니다</div>';
+        return;
+      }
+      els.reporters().innerHTML =
+        '<div class="list">' +
+        arr
+          .map(
+            (r) => `
+          <div class="list-item">
+            <span class="name">${htmlEscape(r.name || '(알수없음)')}</span>
+            <span class="count">${r.count ?? 0}</span>
+          </div>`
+          )
+          .join('') +
+        '</div>';
+    });
+  }
+
+  /* ==== 이벤트 & 초기화 ==== */
+  document.addEventListener('DOMContentLoaded', function () {
+    let searchTimer;
+    els.q().addEventListener('input', function () {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => loadReports(1, els.q().value.trim()), 300);
+    });
+    els.searchBtn().addEventListener('click', () => loadReports(1, els.q().value.trim()));
+    els.statusFilter().addEventListener('change', () => loadReports(1, els.q().value.trim()));
+    els.from().addEventListener('change', () => loadReports(1, els.q().value.trim()));
+    els.to().addEventListener('change', () => loadReports(1, els.q().value.trim()));
+
+    els.closeBtn().addEventListener('click', closePreview);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closePreview();
+    });
+    document.addEventListener('click', (e) => {
+      const panel = els.panel();
+      if (panel.classList.contains('on') && !panel.contains(e.target) && !e.target.closest('tr.report-row')) {
+        closePreview();
+      }
+    });
+
+    // 퀵액션 버튼 → 상태 변경
+    els.qaBtns().forEach((btn) => btn.addEventListener('click', () => changeStatus(btn.dataset.status)));
+
+    // 초기 로드
+    Promise.all([loadSummary(), loadReports(1, ''), loadReporters()]).catch((e) => {
+      console.error(e);
+      alert('데이터를 불러오지 못했습니다.');
+    });
+  });
+</script>
+{% endblock %}

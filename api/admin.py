@@ -12,14 +12,40 @@ from .models import (
     Feedback,
     Statistic,
     SavedPlace,
-    DeviceToken
+    DeviceToken,
+    Notice,
+    NoticeDelivery,
 )
 
+# --------------------------
+# DeviceToken
+# --------------------------
 @admin.register(DeviceToken)
 class DeviceTokenAdmin(admin.ModelAdmin):
-    list_display = ("user", "platform", "token", "updated_at")
-    search_fields = ("token", "user__username", "user__email")
+    list_display = ('id', 'user', 'platform', 'is_active', 'last_seen', 'created_at')
+    list_filter  = ('platform', 'is_active')
+    search_fields = ('user__username', 'token')
+    ordering = ('-last_seen',)
 
+# --------------------------
+# Notice / NoticeDelivery (공지)
+# --------------------------
+@admin.register(Notice)
+class NoticeAdmin(admin.ModelAdmin):
+    list_display  = ('id', 'title', 'target', 'created_at')
+    search_fields = ('title', 'body')
+    ordering      = ('-id',)
+
+@admin.register(NoticeDelivery)
+class NoticeDeliveryAdmin(admin.ModelAdmin):
+    list_display  = ('id', 'notice', 'device_token', 'status', 'fcm_msg_id', 'error_code', 'created_at')
+    list_filter   = ('status', 'device_token__platform')
+    search_fields = ('notice__title', 'device_token__token', 'error_code')
+    ordering      = ('-id',)
+
+# --------------------------
+# User / Animal / SearchHistory / Location / AppBanner / Report
+# --------------------------
 @admin.register(User)
 class UserAdmin(admin.ModelAdmin):
     list_display   = ('username', 'email', 'telphone', 'user_address', 'agree')
@@ -56,7 +82,7 @@ class AppBannerAdmin(admin.ModelAdmin):
 @admin.register(Report)
 class ReportAdmin(admin.ModelAdmin):
     list_display = ('id', 'report_date', 'animal', 'status', 'user', 'location_display')
-    list_filter = ('status', 'report_date', 'animal')
+    list_filter  = ('status', 'report_date', 'animal')
     search_fields = ('user__username', 'animal__name_kor', 'location__region', 'location__address')
     date_hierarchy = 'report_date'
 
@@ -66,6 +92,9 @@ class ReportAdmin(admin.ModelAdmin):
         return "-"
     location_display.short_description = 'Location'
 
+# --------------------------
+# Notification (폼 정규화)
+# --------------------------
 class NotificationAdminForm(forms.ModelForm):
     class Meta:
         model = Notification
@@ -74,17 +103,12 @@ class NotificationAdminForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         inst = getattr(self, "instance", None)
-
         for fname in ("type", "status_change"):
             if fname not in self.fields:
                 continue
             field = self.fields[fname]
-
-            # 1) 빈 옵션 제거 + 필수화
             field.choices = [(v, l) for (v, l) in field.choices if str(v) != ""]
             field.required = True
-
-            # 2) 현재 값으로만 '선택' 설정 (choices 추가 금지)
             if inst and getattr(inst, "pk", None):
                 cur = getattr(inst, fname, None)
                 if cur is None:
@@ -92,9 +116,8 @@ class NotificationAdminForm(forms.ModelForm):
                 cur_norm = str(cur).strip().lower()
                 value_map = {str(v).strip().lower(): v for (v, _) in field.choices}
                 if cur_norm in value_map:
-                    field.initial = value_map[cur_norm]   # 존재하는 값으로만 초기화
+                    field.initial = value_map[cur_norm]
 
-    # 저장 시 정규화 + 유효성 점검
     def _normalize_choice(self, name):
         v = str(self.cleaned_data.get(name, "")).strip().lower()
         field = self.fields[name]
@@ -109,7 +132,6 @@ class NotificationAdminForm(forms.ModelForm):
     def clean_status_change(self):
         return self._normalize_choice("status_change")
 
-
 @admin.register(Notification)
 class NotificationAdmin(admin.ModelAdmin):
     form = NotificationAdminForm
@@ -119,10 +141,9 @@ class NotificationAdmin(admin.ModelAdmin):
     ordering      = ('-created_at',)
 
     def type_display(self, obj):
-        # choices 라벨을 보여줍니다. 값이 없으면 '-'
         return obj.get_type_display() or '-'
     type_display.short_description = 'type'
-    type_display.admin_order_field = 'type'  # 정렬 유지
+    type_display.admin_order_field = 'type'
 
     def status_change_display(self, obj):
         return obj.get_status_change_display() or '-'
@@ -133,6 +154,9 @@ class NotificationAdmin(admin.ModelAdmin):
         return (obj.reply or '')[:30]
     reply_short.short_description = 'reply'
 
+# --------------------------
+# Feedback / Statistic / SavedPlace
+# --------------------------
 @admin.register(Feedback)
 class FeedbackAdmin(admin.ModelAdmin):
     list_display = ("feedback_id","report_id","report","user","admin","feedback_datetime")

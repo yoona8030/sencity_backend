@@ -1,540 +1,530 @@
 /* ========== 전역 변수: 행/헤더 높이 ========== */
 
 :root {
-    --tbl-row-h: 36px;
-    /* 최근 신고: 1행 높이 */
-    --tbl-head-h: 42px;
-    /* thead 높이(패딩 포함) */
-    --card-pad: 16px;
-    /* 기본 카드 패딩 */
-    --card-pad-tight: 12px;
-    --gap: 16px;
-    --list-row-h: 44px;
-    /* 신고한 사용자 TOP: 1행 높이(패딩 포함) */
+  --tbl-row-h: 36px;
+  /* 최근 신고: 1행 높이 */
+  --tbl-head-h: 42px;
+  /* thead 높이(패딩 포함) */
+  --card-pad: 16px;
+  /* 기본 카드 패딩 */
+  --card-pad-tight: 12px;
+  --gap: 16px;
+  --list-row-h: 44px;
+  /* 신고한 사용자 TOP: 1행 높이(패딩 포함) */
 }
-
 
 /* ========== 레이아웃 공통 ========== */
 
 .dash {
-    padding: 24px;
+  padding: 24px;
 }
-
 
 /* ========== 헤더 ========== */
 
 .dash__header {
-    margin-bottom: 12px;
+  margin-bottom: 12px;
 }
 
 .page-title {
-    margin: 0;
-    font-size: 36px;
-    line-height: 1.2;
-    font-weight: 800;
-    letter-spacing: -0.02em;
+  margin: 0;
+  font-size: 36px;
+  line-height: 1.2;
+  font-weight: 800;
+  letter-spacing: -0.02em;
 }
-
 
 /* 제목 아래 줄: 자막(좌) + 버튼(우) → Grid */
 
 .dash__meta {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    align-items: end;
-    column-gap: 12px;
-    margin-top: 6px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  column-gap: 12px;
+  margin-top: 6px;
 }
 
 .page-subtitle {
-    margin: 0;
-    color: #666;
-    min-width: 0;
-    overflow-wrap: anywhere;
+  margin: 0;
+  color: #666;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .actions {
-    display: grid;
-    grid-auto-rows: 36px;
-    grid-template-columns: repeat(4, max-content);
-    gap: 8px;
-    justify-content: end;
-    align-content: end;
+  display: grid;
+  grid-auto-rows: 36px;
+  grid-template-columns: repeat(4, max-content);
+  gap: 8px;
+  justify-content: end;
+  align-content: end;
 }
 
 .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    height: 36px;
-    padding: 0 14px;
-    border-radius: 10px;
-    border: 1px solid #ddd;
-    background: #fff;
-    font-weight: 600;
-    color: #222;
-    white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid #ddd;
+  background: #fff;
+  font-weight: 600;
+  color: #222;
+  white-space: nowrap;
 }
 
 .btn:hover {
-    background: #f7f7f7;
+  background: #f7f7f7;
 }
 
 @media (max-width: 1200px) {
-    .actions {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        justify-content: stretch;
-    }
-    .actions .btn {
-        width: 100%;
-        justify-content: center;
-    }
+  .actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    justify-content: stretch;
+  }
+  .actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
 }
 
 @media (max-width: 640px) {
-     :root {
-        --list-row-h: 36px;
-    }
-    .dash__meta {
-        grid-template-columns: 1fr;
-        row-gap: 8px;
-        align-items: start;
-    }
+  :root {
+    --list-row-h: 36px;
+  }
+  .dash__meta {
+    grid-template-columns: 1fr;
+    row-gap: 8px;
+    align-items: start;
+  }
 }
-
 
 /* ========== 링크 ========== */
 
 .link {
-    color: #333;
-    text-decoration: none;
-    font-weight: 600;
-    line-height: 1.4;
+  color: #333;
+  text-decoration: none;
+  font-weight: 600;
+  line-height: 1.4;
 }
 
 .link:hover {
-    text-decoration: underline;
+  text-decoration: underline;
 }
-
 
 /* ========== 서버 배너 ========== */
 
 .dash__banner {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin: 18px 0 8px 0;
-    padding: 12px 14px;
-    border: 1px solid #eee;
-    background: #fafafa;
-    border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0 8px 0;
+  padding: 12px 14px;
+  border: 1px solid #eee;
+  background: #fafafa;
+  border-radius: 12px;
 }
 
 .dash__banner .fa-circle-info {
-    color: #666;
+  color: #666;
 }
-
 
 /* ========== 카드 공통 ========== */
 
 .card {
-    background: #fff;
-    border: 1px solid #eee;
-    border-radius: 18px;
-    padding: var(--card-pad);
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 18px;
+  padding: var(--card-pad);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
 }
 
-.card+.card {
-    margin-top: var(--gap);
+.card + .card {
+  margin-top: var(--gap);
 }
 
 .card--tight {
-    padding: var(--card-pad-tight);
+  padding: var(--card-pad-tight);
 }
 
 .card__head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 10px;
-    min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  min-height: 32px;
 }
 
 .card__head h3 {
-    margin: 0;
-    font-size: 18px;
-    line-height: 1.3;
-    font-weight: 800;
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.3;
+  font-weight: 800;
 }
-
 
 /* 리스트 전용: 6행 딱 맞춤 */
 
 .card--list .list__wrap--fit6 {
-    max-height: calc(var(--list-row-h) * 6);
-    /* 정확히 6행 보이기 */
-    overflow-y: auto;
+  max-height: calc(var(--list-row-h) * 6);
+  /* 정확히 6행 보이기 */
+  overflow-y: auto;
 }
-
 
 /* ========== 그리드 ========== */
 
 .grid {
-    display: grid;
-    gap: var(--gap);
+  display: grid;
+  gap: var(--gap);
 }
 
 .grid--kpi {
-    display: flex;
-    gap: var(--gap);
-    margin-top: 18px;
+  display: flex;
+  gap: var(--gap);
+  margin-top: 18px;
 }
 
-.grid--kpi>.kpi {
-    flex: 1 1 0;
-    min-width: 0;
+.grid--kpi > .kpi {
+  flex: 1 1 0;
+  min-width: 0;
 }
 
-.grid--kpi .card+.card {
-    margin-top: 0;
+.grid--kpi .card + .card {
+  margin-top: 0;
 }
 
 @media (max-width: 900px) {
-     :root {
-        --list-row-h: 40px;
-    }
-    .grid--kpi {
-        flex-wrap: wrap;
-    }
-    .grid--kpi>.kpi {
-        flex: 1 1 calc(50% - 8px);
-    }
+  :root {
+    --list-row-h: 40px;
+  }
+  .grid--kpi {
+    flex-wrap: wrap;
+  }
+  .grid--kpi > .kpi {
+    flex: 1 1 calc(50% - 8px);
+  }
 }
 
 .grid--main {
-    grid-template-columns: 1.2fr 1fr;
-    margin-top: var(--gap);
-    align-items: start;
-    /* ✅ 상단 정렬 고정 */
+  grid-template-columns: 1.2fr 1fr;
+  margin-top: var(--gap);
+  align-items: start;
+  /* ✅ 상단 정렬 고정 */
 }
 
 .col {
-    display: grid;
-    gap: var(--gap);
+  display: grid;
+  gap: var(--gap);
 }
 
 @media (max-width: 1200px) {
-    .grid--main {
-        grid-template-columns: 1fr;
-    }
+  .grid--main {
+    grid-template-columns: 1fr;
+  }
 }
-
 
 /* ========== KPI ========== */
 
 .kpi,
 .kpi * {
-    box-sizing: border-box;
+  box-sizing: border-box;
 }
 
 .kpi {
-    height: 140px;
-    display: flex;
-    flex-direction: column;
-    padding: 16px;
+  height: 140px;
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
 }
 
 .kpi__label {
-    height: 22px;
-    line-height: 22px;
-    font-size: 14px;
-    color: #666;
-    font-weight: 600;
-    display: block;
+  height: 22px;
+  line-height: 22px;
+  font-size: 14px;
+  color: #666;
+  font-weight: 600;
+  display: block;
 }
 
 .kpi__value {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    line-height: 1;
-    font-size: 30px;
-    font-weight: 800;
-    color: #111;
+  flex: 1;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  line-height: 1;
+  font-size: 30px;
+  font-weight: 700;
+  color: #111;
 }
 
 .kpi__value .unit {
-    font-size: 14px;
-    margin-left: 6px;
-    font-weight: 700;
-    color: #666;
+  line-height: 1;
+  font-size: 14px;
+  margin-left: 6px;
+  font-weight: 700;
+  color: #666;
 }
 
 .kpi__hint {
-    height: 22px;
-    line-height: 22px;
-    font-size: 13px;
-    color: #888;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  height: 22px;
+  line-height: 22px;
+  font-size: 13px;
+  color: #888;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-
 
 /* ========== 라이브 ========== */
 
 .live__body {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 12px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
 }
 
 .live__img {
-    width: 100%;
-    height: 260px;
-    object-fit: cover;
-    border-radius: 12px;
-    border: 1px solid #eee;
+  width: 100%;
+  height: 260px;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid #eee;
 }
 
 .live__events {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: grid;
-    gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
 }
 
 .live__empty {
-    color: #888;
-    font-size: 14px;
+  color: #888;
+  font-size: 14px;
 }
-
 
 /* ========== 공지 ========== */
 
 .notice__list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: grid;
-    gap: 12px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
 }
 
 .notice__item {
-    padding: 12px;
-    border: 1px solid #f0f0f0;
-    border-radius: 12px;
+  padding: 12px;
+  border: 1px solid #f0f0f0;
+  border-radius: 12px;
 }
 
 .notice__title {
-    font-weight: 700;
+  font-weight: 700;
 }
 
 .notice__meta {
-    margin-top: 4px;
-    color: #666;
-    font-size: 13px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
+  margin-top: 4px;
+  color: #666;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .notice__meta .dot {
-    width: 4px;
-    height: 4px;
-    border-radius: 50%;
-    background: #bbb;
-    display: inline-block;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #bbb;
+  display: inline-block;
 }
 
 .notice__snippet {
-    margin: 8px 0 0 0;
-    color: #444;
+  margin: 8px 0 0 0;
+  color: #444;
 }
 
 .notice__empty {
-    color: #888;
+  color: #888;
 }
 
-
 /* ========== TOP 사용자 ========== */
-
 
 /* 기본 리스트 구조 보강 (기존 선언과 중복되어도 안전) */
 
 .top-users__list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: grid;
-    gap: 8px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
 }
-
 
 /* 각 행: 고정 높이 + 좌우 정렬 */
 
 .top-users__item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    height: var(--list-row-h);
-    /* ✅ 행 높이 고정 */
-    padding: 0 12px;
-    /* 세로 패딩 제거 → 높이 안정 */
-    border: 1px solid #f0f0f0;
-    border-radius: 12px;
-    gap: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: var(--list-row-h);
+  /* ✅ 행 높이 고정 */
+  padding: 0 12px;
+  /* 세로 패딩 제거 → 높이 안정 */
+  border: 1px solid #f0f0f0;
+  border-radius: 12px;
+  gap: 8px;
 }
-
 
 /* 이름: 한 줄 고정 + … 말줄임 */
 
 .top-users__item .name {
-    min-width: 0;
-    /* flex 내부 말줄임 가능 조건 */
-    flex: 1 1 auto;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  min-width: 0;
+  /* flex 내부 말줄임 가능 조건 */
+  flex: 1 1 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-
 
 /* 개수: 자릿수 안정 */
 
 .top-users__item .count {
-    flex: 0 0 auto;
-    font-variant-numeric: tabular-nums;
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
 }
-
 
 /* 빈 상태 표기 */
 
 .top-users__empty {
-    color: #888;
-    height: var(--list-row-h);
-    display: flex;
-    align-items: center;
-    padding: 0 12px;
-    border: 1px dashed #eee;
-    border-radius: 12px;
+  color: #888;
+  height: var(--list-row-h);
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  border: 1px dashed #eee;
+  border-radius: 12px;
 }
-
 
 /* ========== 테이블 ========== */
 
 .table__wrap {
-    overflow: auto;
+  overflow: auto;
 }
 
 .tbl {
-    table-layout: fixed;
-    width: 100%;
-    border-collapse: separate;
-    border-spacing: 0;
+  table-layout: fixed;
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
 }
 
 .tbl th,
 .tbl td {
-    vertical-align: middle;
-    padding: 8px 10px;
+  vertical-align: middle;
+  padding: 8px 10px;
+  line-height: 1.25;
 }
-
 
 /* thead 스타일(높이 안정) */
 
 .tbl thead th {
-    text-align: left;
-    border-bottom: 1px solid #eee;
-    color: #666;
-    font-weight: 800;
-    height: var(--tbl-head-h);
+  text-align: left;
+  border-bottom: 1px solid #eee;
+  color: #666;
+  font-weight: 800;
+  height: var(--tbl-head-h);
 }
-
 
 /* 본문 행 높이 고정 */
 
 .tbl tbody tr {
-    height: var(--tbl-row-h);
+  height: var(--tbl-row-h);
 }
 
 .td-empty {
-    color: #888;
-    text-align: center;
+  color: #888;
+  text-align: center;
 }
-
 
 /* 지역: 한 줄 + … */
 
 .tbl td.td-ell {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-
 
 /* 동물: 반드시 가로 한 줄 */
 
 .tbl td.td-animal {
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-
 
 /* ========== “최근 신고 6행 딱 맞춤” 래퍼 ========== */
 
 .card--table .table__wrap--fit6 {
-    /* 카드 상하 패딩을 고려해도 정확히 6행만 보이게 */
-    max-height: calc(var(--tbl-head-h) + (var(--tbl-row-h) * 6) + 2px);
-    overflow-y: auto;
+  /* 카드 상하 패딩을 고려해도 정확히 6행만 보이게 */
+  max-height: calc(var(--tbl-head-h) + (var(--tbl-row-h) * 6) + 2px);
+  overflow-y: auto;
 }
-
 
 /* 카드와 헤더 정렬감을 위해 tighter 모드 */
 
 .card--table .tbl thead th,
 .card--table .tbl tbody td {
-    padding: 6px 10px;
+  padding: 6px 10px;
 }
-
 
 /* ========== 상태 배지 ========== */
 
 .badge {
-    display: inline-block;
-    padding: 4px 8px;
-    border-radius: 10px;
-    font-size: 12px;
-    border: 1px solid #eee;
-    background: #fafafa;
-    color: #333;
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  border: 1px solid #eee;
+  background: #fafafa;
+  color: #333;
 }
 
 .badge.completed,
 .badge.완료,
 .badge.처리완료,
 .badge.종료 {
-    background: #ecfff3;
-    border-color: #cdf1da;
-    color: #127a3a;
+  background: #ecfff3;
+  border-color: #cdf1da;
+  color: #127a3a;
 }
 
 .badge.checking,
 .badge.처리중,
 .badge.진행중,
 .badge.확인중 {
-    background: #fff8e7;
-    border-color: #ffe3a9;
-    color: #8a5a00;
+  background: #fff8e7;
+  border-color: #ffe3a9;
+  color: #8a5a00;
 }
 
 .badge.on_hold,
 .badge.대기,
 .badge.미처리,
 .badge.보류 {
-    background: #fff1f1;
-    border-color: #ffd1d1;
-    color: #a33838;
+  background: #fff1f1;
+  border-color: #ffd1d1;
+  color: #a33838;
+}
+
+.badge,
+.td-ell,
+.td-animal,
+.tbl th,
+.tbl td {
+  line-height: 1.2;
+  letter-spacing: 0;
+  /* 혹시 -0.02em 같은 게 있으면 없앰 */
+  white-space: nowrap;
+  /* 표에서 줄바꿈 방지 */
 }

@@ -1,10 +1,12 @@
-#!/usr/bin/env python
-"""Django's command-line utility for administrative tasks."""
 import os
 import sys
 
-
 def main():
+    # ✅ Windows에서 OpenCV MSMF 충돌 방지: DSHOW/FFMPEG 우선 사용
+    os.environ.setdefault("OPENCV_VIDEOIO_PRIORITY_MSMF", "0")
+    # (선택) 일부 환경에서 발생하는 MKL/OMP 중복 로드 경고 완화
+    os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+
     """Run administrative tasks."""
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'sencity_backend.settings')
     try:
@@ -16,7 +18,6 @@ def main():
             "forget to activate a virtual environment?"
         ) from exc
     execute_from_command_line(sys.argv)
-
 
 if __name__ == '__main__':
     main()

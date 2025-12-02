@@ -1,0 +1,15 @@
+names:
+- goat
+- wild_boar
+- squirrel
+- raccoon
+- asiatic_black_bear
+- hare
+- weasel
+- haron
+- dog
+- cat
+nc: 10
+path: /content/yolo_dataset
+train: images/train
+val: images/val

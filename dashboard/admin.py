@@ -29,13 +29,38 @@ class AnimalAdmin(admin.ModelAdmin):
 
 @admin.register(Report)
 class ReportAdmin(admin.ModelAdmin):
-    list_display = ("id","animal_label","status","report_region","report_date","source","device","prob")
-    list_filter  = ("status","source","device")
-    search_fields = ("animal_name","report_region","title")
-    actions            = ['mark_handled']
-    date_hierarchy     = 'report_date'     # ← 날짜 네비게이션 추가(편의)
-    list_per_page      = 30
-    ordering           = ('-report_date',)
+    list_display = (
+        "id",
+        "get_animal_label",   # ← 변경: animal_label → get_animal_label
+        "title",
+        "status",
+        "report_region",
+        "user",
+        "report_date",
+    )
+    list_filter = ("status", "report_region")
+    search_fields = ("title", "animal_name", "report_region", "user__username", "user__email")
+
+    def get_queryset(self, request):
+        qs = super().get_queryset(request)
+        # 성능 개선: animal/user 조인
+        return qs.select_related("animal", "user")
+
+    @admin.display(description="동물", ordering="animal__name")
+    def get_animal_label(self, obj):
+        """
+        Admin에서 안전하게 동물 라벨 보여주기:
+        - obj.animal.name_kor > name > label > title
+        - 없으면 obj.animal_name
+        - 그래도 없으면 '미상'
+        """
+        a = getattr(obj, "animal", None)
+        if a:
+            for cand in ("name_kor", "name", "label", "title"):
+                v = getattr(a, cand, None)
+                if v:
+                    return v
+        return getattr(obj, "animal_name", None) or "미상"
 
     def mark_handled(self, request, queryset):
         updated = queryset.update(status='처리완료')  # ← 공백 없이(아래 2번 참고)
